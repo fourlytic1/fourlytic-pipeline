@@ -1,0 +1,1055 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fourlytic Pipeline</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%230E7C86%22/><text x=%2250%22 y=%2265%22 font-size=%2244%22 font-family=%22sans-serif%22 font-weight=%22700%22 fill=%22white%22 text-anchor=%22middle%22>FL</text></svg>">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#F5F6F8; --surface:#FFFFFF; --surface-2:#FAFBFC;
+  --border:#E1E4E9; --fg:#1B2430; --fg-muted:#5B6472; --fg-faint:#8A93A1;
+  --accent:#0E7C86; --accent-fg:#FFFFFF; --accent-soft:#E3F2F2;
+  --good:#1F9D55; --good-soft:#E3F6EA;
+  --bad:#D64545; --bad-soft:#FBE7E7;
+  --warn:#C9862A; --warn-soft:#FBF0DF;
+  --info:#3B6FD9; --info-soft:#E6ECFB;
+  --shadow: 0 1px 2px rgba(20,30,40,.06), 0 4px 14px rgba(20,30,40,.06);
+  --font-display:'Space Grotesk', 'Segoe UI', sans-serif;
+  --font-body:'Inter', 'Segoe UI', sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#13171D; --surface:#1B2027; --surface-2:#20262E;
+    --border:#2C333C; --fg:#E7EAEE; --fg-muted:#9BA4B1; --fg-faint:#6B7380;
+    --accent:#2FB3B0; --accent-fg:#06211F; --accent-soft:#193331;
+    --good:#3FC274; --good-soft:#163524;
+    --bad:#F07373; --bad-soft:#3A1E1E;
+    --warn:#E3A748; --warn-soft:#3A2E16;
+    --info:#7FA3F2; --info-soft:#1B2740;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.35);
+    color-scheme: dark;
+  }
+}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font-family:var(--font-body); font-size:14px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{font-family:var(--font-display); font-weight:600; margin:0; text-wrap:balance;}
+a{color:var(--accent);}
+button, input, select, textarea{font-family:inherit; font-size:inherit; color:inherit;}
+.tabular{font-variant-numeric:tabular-nums;}
+::-webkit-scrollbar{height:10px; width:10px;}
+::-webkit-scrollbar-thumb{background:var(--border); border-radius:6px;}
+
+#app{height:100%;}
+.shell{display:flex; height:100%;}
+.sidebar{width:220px; flex:none; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; padding:18px 0;}
+.brand{display:flex; align-items:center; gap:10px; padding:0 18px 18px; border-bottom:1px solid var(--border); margin-bottom:10px;}
+.brand .mark{width:28px; height:28px; border-radius:8px; background:var(--accent); color:var(--accent-fg); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:700; font-size:14px;}
+.brand .name{font-family:var(--font-display); font-weight:700; font-size:15px;}
+.nav{display:flex; flex-direction:column; gap:2px; padding:0 10px;}
+.nav button{all:unset; cursor:pointer; padding:9px 12px; border-radius:8px; color:var(--fg-muted); display:flex; align-items:center; gap:10px; font-size:13.5px; font-weight:500;}
+.nav button svg{flex:none; opacity:.8;}
+.nav button:hover{background:var(--surface-2); color:var(--fg);}
+.nav button.active{background:var(--accent-soft); color:var(--accent);}
+.nav .section-label{font-size:10.5px; text-transform:uppercase; letter-spacing:.07em; color:var(--fg-faint); padding:14px 12px 6px;}
+.sidebar-footer{margin-top:auto; padding:12px 18px 4px; border-top:1px solid var(--border);}
+.me{display:flex; align-items:center; gap:9px;}
+.me .avatar{width:30px; height:30px; border-radius:50%; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12.5px; flex:none;}
+.me .who{min-width:0;}
+.me .who .n{font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.me .who .r{font-size:11px; color:var(--fg-faint); text-transform:uppercase; letter-spacing:.04em;}
+.logout-btn{all:unset; cursor:pointer; margin-top:10px; font-size:12px; color:var(--fg-faint); display:block;}
+.logout-btn:hover{color:var(--bad);}
+
+.main{flex:1; min-width:0; overflow:auto; padding:22px 26px 60px;}
+.topbar{display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:18px; flex-wrap:wrap;}
+.topbar h1{font-size:21px;}
+.topbar .sub{color:var(--fg-muted); font-size:13px; margin-top:2px;}
+.search{position:relative; width:260px; max-width:60vw;}
+.search input{width:100%; padding:8px 12px 8px 32px; border-radius:8px; border:1px solid var(--border); background:var(--surface); outline:none;}
+.search input:focus{border-color:var(--accent);}
+.search svg{position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--fg-faint);}
+
+.btn{all:unset; cursor:pointer; display:inline-flex; align-items:center; gap:7px; padding:8px 14px; border-radius:8px; font-weight:600; font-size:13px; border:1px solid transparent;}
+.btn-primary{background:var(--accent); color:var(--accent-fg);}
+.btn-primary:hover{filter:brightness(1.06);}
+.btn-ghost{background:var(--surface); border-color:var(--border); color:var(--fg);}
+.btn-ghost:hover{background:var(--surface-2);}
+.btn:disabled{opacity:.5; cursor:not-allowed;}
+.btn-sm{padding:5px 10px; font-size:12px;}
+
+.login-wrap{min-height:100%; display:flex; align-items:center; justify-content:center; padding:24px;}
+.login-card{width:100%; max-width:360px; background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:32px 28px; box-shadow:var(--shadow);}
+.login-card .mark{width:40px; height:40px; border-radius:11px; background:var(--accent); color:var(--accent-fg); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:700; font-size:18px; margin-bottom:16px;}
+.login-card h1{font-size:19px; margin-bottom:4px;}
+.login-card p.lead{color:var(--fg-muted); font-size:13px; margin-bottom:22px;}
+.field{margin-bottom:14px;}
+.field label{display:block; font-size:12px; font-weight:600; color:var(--fg-muted); margin-bottom:6px;}
+.field input{width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); outline:none;}
+.field input:focus{border-color:var(--accent); background:var(--surface);}
+.login-err{background:var(--bad-soft); color:var(--bad); font-size:12.5px; padding:9px 11px; border-radius:8px; margin-bottom:14px; display:none;}
+.login-err.show{display:block;}
+.login-card .btn-primary{width:100%; justify-content:center; padding:11px; margin-top:4px;}
+.login-hint{margin-top:18px; font-size:11.5px; color:var(--fg-faint); line-height:1.5;}
+
+.card{background:var(--surface); border:1px solid var(--border); border-radius:12px;}
+.stat-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:20px;}
+.stat{background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px;}
+.stat .num{font-family:var(--font-display); font-size:24px; font-weight:700;}
+.stat .lbl{font-size:12px; color:var(--fg-muted); margin-top:2px;}
+
+table{width:100%; border-collapse:collapse;}
+.table-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:12px; background:var(--surface);}
+th{text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--fg-faint); font-weight:600; padding:10px 14px; border-bottom:1px solid var(--border); white-space:nowrap;}
+td{padding:11px 14px; border-bottom:1px solid var(--border); font-size:13.5px; white-space:nowrap;}
+tr:last-child td{border-bottom:none;}
+tr.row-click{cursor:pointer;}
+tr.row-click:hover{background:var(--surface-2);}
+.name-cell{font-weight:600;}
+.muted{color:var(--fg-muted);}
+.faint{color:var(--fg-faint);}
+.empty-state{padding:50px 20px; text-align:center; color:var(--fg-muted);}
+.empty-state .big{font-size:32px; margin-bottom:10px;}
+
+.badge{display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; padding:3px 9px; border-radius:100px; text-transform:uppercase; letter-spacing:.03em; white-space:nowrap;}
+.badge-admin{background:var(--accent-soft); color:var(--accent);}
+.badge-sales{background:var(--info-soft); color:var(--info);}
+.pill{display:inline-flex; align-items:center; font-size:11.5px; font-weight:600; padding:3px 9px; border-radius:100px; white-space:nowrap;}
+
+.board{display:flex; gap:14px; overflow-x:auto; padding-bottom:14px; align-items:flex-start;}
+.col{flex:none; width:250px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px; display:flex; flex-direction:column; max-height:calc(100vh - 160px);}
+.col-head{padding:12px 13px 10px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;}
+.col-head .t{font-weight:700; font-size:12.5px; display:flex; align-items:center; gap:7px;}
+.col-head .dot{width:8px; height:8px; border-radius:50%; flex:none;}
+.col-head .count{font-size:11px; color:var(--fg-faint); background:var(--surface); border:1px solid var(--border); border-radius:100px; padding:1px 7px;}
+.col-body{overflow-y:auto; padding:10px; display:flex; flex-direction:column; gap:9px;}
+.deal-card{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:11px 12px; cursor:pointer; transition:border-color .12s;}
+.deal-card:hover{border-color:var(--accent);}
+.deal-card .dn{font-weight:700; font-size:13px; margin-bottom:3px;}
+.deal-card .dc{font-size:12px; color:var(--fg-muted); margin-bottom:7px;}
+.deal-card .meta{display:flex; align-items:center; justify-content:space-between; gap:6px;}
+.deal-card .rate{font-size:12px; font-weight:600; color:var(--accent);}
+.deal-card .owner{width:20px; height:20px; border-radius:50%; background:var(--accent-soft); color:var(--accent); font-size:9.5px; font-weight:700; display:flex; align-items:center; justify-content:center;}
+.col-empty{padding:18px 8px; text-align:center; color:var(--fg-faint); font-size:12px;}
+
+.overlay{position:fixed; inset:0; background:rgba(10,14,18,.45); z-index:40; display:flex; justify-content:flex-end;}
+.drawer{width:min(560px, 100vw); height:100%; background:var(--surface); box-shadow:var(--shadow); overflow-y:auto; animation:slidein .18s ease-out;}
+@keyframes slidein{from{transform:translateX(24px); opacity:0;} to{transform:translateX(0); opacity:1;}}
+.drawer-head{position:sticky; top:0; background:var(--surface); border-bottom:1px solid var(--border); padding:16px 20px; display:flex; align-items:flex-start; justify-content:space-between; gap:10px; z-index:2;}
+.drawer-head h2{font-size:18px;}
+.drawer-head .sub{font-size:12.5px; color:var(--fg-muted); margin-top:3px;}
+.icon-btn{all:unset; cursor:pointer; width:28px; height:28px; border-radius:7px; display:flex; align-items:center; justify-content:center; color:var(--fg-muted);}
+.icon-btn:hover{background:var(--surface-2); color:var(--fg);}
+.drawer-body{padding:16px 20px 40px;}
+.tabs{display:flex; gap:4px; border-bottom:1px solid var(--border); margin-bottom:16px; overflow-x:auto;}
+.tab{all:unset; cursor:pointer; padding:9px 12px; font-size:12.5px; font-weight:600; color:var(--fg-muted); border-bottom:2px solid transparent; white-space:nowrap;}
+.tab.active{color:var(--accent); border-bottom-color:var(--accent);}
+.kv{display:grid; grid-template-columns:120px 1fr; gap:9px 12px; font-size:13px;}
+.kv .k{color:var(--fg-faint); font-size:11.5px; text-transform:uppercase; letter-spacing:.04em; padding-top:2px;}
+.kv .v{min-width:0; word-break:break-word;}
+.kv .v a{word-break:break-all;}
+.section-title{font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--fg-faint); margin:22px 0 10px;}
+.section-title:first-child{margin-top:0;}
+
+.act-item{display:flex; gap:10px; padding:10px 0; border-bottom:1px solid var(--border);}
+.act-item:last-child{border-bottom:none;}
+.act-item .dot{width:7px; height:7px; border-radius:50%; background:var(--accent); margin-top:6px; flex:none;}
+.act-item .body{min-width:0;}
+.act-item .txt{font-size:13px;}
+.act-item .meta{font-size:11px; color:var(--fg-faint); margin-top:2px;}
+.task-item{display:flex; align-items:flex-start; gap:9px; padding:9px 0; border-bottom:1px solid var(--border);}
+.task-item:last-child{border-bottom:none;}
+.task-item input[type=checkbox]{margin-top:2px; width:16px; height:16px; accent-color:var(--accent);}
+.task-item.done .tt{text-decoration:line-through; color:var(--fg-faint);}
+.task-item .tt{font-size:13px; font-weight:500;}
+.task-item .tm{font-size:11px; color:var(--fg-faint); margin-top:2px;}
+
+textarea.note-input{width:100%; border:1px solid var(--border); border-radius:8px; padding:9px 11px; background:var(--surface-2); resize:vertical; min-height:60px; outline:none;}
+textarea.note-input:focus{border-color:var(--accent); background:var(--surface);}
+.inline-form{display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;}
+.inline-form input, .inline-form select{flex:1; min-width:120px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2);}
+
+.modal-overlay{position:fixed; inset:0; background:rgba(10,14,18,.45); z-index:50; display:flex; align-items:center; justify-content:center; padding:20px;}
+.modal{width:100%; max-width:480px; max-height:90vh; overflow-y:auto; background:var(--surface); border-radius:14px; box-shadow:var(--shadow); padding:22px;}
+.modal h3{font-size:16px; margin-bottom:16px;}
+.form-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+.form-grid .full{grid-column:1/-1;}
+.form-grid label{display:block; font-size:11.5px; font-weight:600; color:var(--fg-muted); margin-bottom:5px;}
+.form-grid input, .form-grid select, .form-grid textarea{width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2); outline:none;}
+.form-grid input:focus, .form-grid select:focus, .form-grid textarea:focus{border-color:var(--accent); background:var(--surface);}
+.modal-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:18px;}
+
+.toast-wrap{position:fixed; bottom:18px; right:18px; z-index:60; display:flex; flex-direction:column; gap:8px;}
+.toast{background:var(--fg); color:var(--bg); padding:10px 16px; border-radius:9px; font-size:13px; box-shadow:var(--shadow); animation:toastin .15s ease-out;}
+.toast.err{background:var(--bad);}
+@keyframes toastin{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
+
+.user-row{display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--border);}
+.user-row:last-child{border-bottom:none;}
+.user-row .avatar{width:34px; height:34px; border-radius:50%; background:var(--accent-soft); color:var(--accent); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; flex:none;}
+.user-row .info{flex:1; min-width:0;}
+.user-row .info .n{font-weight:600; font-size:13.5px;}
+.user-row .info .u{font-size:12px; color:var(--fg-faint);}
+
+@media (max-width: 760px){
+  .sidebar{position:fixed; z-index:30; height:100%; transform:translateX(-100%); transition:transform .18s;}
+  .sidebar.open{transform:translateX(0);}
+  .menu-btn{display:flex !important;}
+  .form-grid{grid-template-columns:1fr;}
+}
+.menu-btn{display:none; all:unset; cursor:pointer; width:34px; height:34px; align-items:center; justify-content:center; border-radius:8px; border:1px solid var(--border); background:var(--surface); margin-right:8px;}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast-wrap" id="toasts"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+/* =====================================================================
+   FOURLYTIC PIPELINE — Supabase-backed internal recruiting CRM
+   ===================================================================== */
+
+const SUPABASE_URL = "https://rnblkqlmfxwjgfsujyxg.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_lAdlOIv3DQYAVI-BoTkESg_0pE9halW";
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const STAGES = [
+  {id:'contacted',   label:'Contacted',          color:'var(--fg-faint)'},
+  {id:'hr_call',      label:'HR Call',            color:'var(--info)'},
+  {id:'interview_assign', label:'Interview Assign', color:'var(--info)'},
+  {id:'awaiting_feedback', label:'Awaiting Feedback', color:'var(--warn)'},
+  {id:'interview',    label:'Interview',          color:'var(--info)'},
+  {id:'rescheduled',  label:'Rescheduled',        color:'var(--warn)'},
+  {id:'hire_feedback', label:'Hire Feedback',     color:'var(--warn)'},
+  {id:'nurture',      label:'Nurture',            color:'var(--fg-faint)'},
+  {id:'won',          label:'Won',                color:'var(--good)'},
+  {id:'lost',         label:'Lost',               color:'var(--bad)'},
+];
+const SOURCES = ['LinkedIn','Email Outreach','Inbound','Referral'];
+const JOB_TYPES = ['Remote','Hybrid','Onsite'];
+const RATE_TYPES = ['Hourly','Annual'];
+
+let state = {
+  authed: false,
+  me: null,            // {id, username, displayName, role}
+  route: 'pipeline',
+  detail: null,
+  users: [], companies: [], contacts: [], deals: [], activities: [], tasks: [],
+  loaded: {users:false, companies:false, contacts:false, deals:false, activities:false, tasks:false},
+  search: '',
+  sidebarOpen: false,
+};
+
+/* ---------------- utils ---------------- */
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function initials(name){ return (name||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
+function fmtDate(d){ if(!d) return '—'; try{ return new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});}catch(e){return d;} }
+function fmtDateTime(d){ if(!d) return '—'; try{ return new Date(d).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});}catch(e){return d;} }
+function toast(msg, isErr){
+  const wrap = document.getElementById('toasts');
+  const t = document.createElement('div');
+  t.className = 'toast' + (isErr?' err':'');
+  t.textContent = msg;
+  wrap.appendChild(t);
+  setTimeout(()=>t.remove(), 3200);
+}
+function stageMeta(id){ return STAGES.find(s=>s.id===id) || STAGES[0]; }
+function userById(id){ return state.users.find(u=>u.id===id); }
+function companyById(id){ return state.companies.find(c=>c.id===id); }
+function contactById(id){ return state.contacts.find(c=>c.id===id); }
+function dealById(id){ return state.deals.find(d=>d.id===id); }
+function contactName(c){ return c ? `${c.first_name||''} ${c.last_name||''}`.trim() || '(unnamed)' : '—'; }
+function isAdmin(){ return state.me && state.me.role === 'admin'; }
+
+/* ---------------- boot ---------------- */
+async function boot(){
+  render();
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) {
+    await loadMyProfile();
+  }
+  sb.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN') {
+      await loadMyProfile();
+    } else if (event === 'SIGNED_OUT') {
+      state.authed = false; state.me = null; render();
+    }
+  });
+}
+boot();
+
+async function loadMyProfile(){
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return;
+  const { data: profile, error } = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle();
+  if (error || !profile || !profile.active) {
+    toast('Your account is not active. Contact an admin.', true);
+    await sb.auth.signOut();
+    return;
+  }
+  state.me = { id: profile.id, username: profile.username, displayName: profile.display_name, role: profile.role };
+  state.authed = true;
+  render();
+  subscribeAll();
+}
+
+/* ---------------- data loading + realtime ---------------- */
+let subscribed = false;
+async function subscribeAll(){
+  if (subscribed) return;
+  subscribed = true;
+  const tables = [
+    ['users','profiles'], ['companies','companies'], ['contacts','contacts'],
+    ['deals','deals'], ['activities','activities'], ['tasks','tasks']
+  ];
+  for (const [key, table] of tables) {
+    await reload(key, table);
+    sb.channel(table + '-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table }, () => reload(key, table))
+      .subscribe();
+  }
+}
+async function reload(key, table){
+  const { data, error } = await sb.from(table).select('*');
+  if (error) { console.error(table, error); toast('Could not load '+table, true); return; }
+  state[key] = data || [];
+  state.loaded[key] = true;
+  render();
+}
+
+/* ---------------- auth ---------------- */
+async function tryLogin(username, password){
+  const { data: email, error: lookupErr } = await sb.rpc('email_for_username', { p_username: username.trim() });
+  if (lookupErr || !email) return { ok:false, msg:'No account with that username.' };
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) return { ok:false, msg:'Incorrect password.' };
+  return { ok:true };
+}
+async function logout(){
+  await sb.auth.signOut();
+  state.route='pipeline'; state.detail=null;
+  render();
+}
+
+/* ---------------- writes ---------------- */
+async function addActivity(parentType, parentId, kind, text){
+  if (!text || !text.trim()) return;
+  const { error } = await sb.from('activities').insert({
+    parent_type: parentType, parent_id: parentId, kind, text: text.trim(), by: state.me.displayName
+  });
+  if (error) toast(error.message, true);
+}
+async function addTask(parentType, parentId, title, dueDate){
+  if (!title || !title.trim()) return;
+  const { error } = await sb.from('tasks').insert({
+    parent_type: parentType, parent_id: parentId, title: title.trim(), due_date: dueDate||null,
+    done:false, assigned_to: state.me.displayName, created_by: state.me.displayName
+  });
+  if (error) toast(error.message, true);
+}
+async function toggleTask(task){
+  const { error } = await sb.from('tasks').update({ done: !task.done }).eq('id', task.id);
+  if (error) toast(error.message, true);
+}
+async function saveCompany(data, id){
+  const payload = {...data};
+  if (id){ payload.updated_at = new Date().toISOString(); const { error } = await sb.from('companies').update(payload).eq('id', id); if(error) throw error; return id; }
+  payload.created_by = state.me.displayName;
+  const { data: row, error } = await sb.from('companies').insert(payload).select().single();
+  if (error) throw error;
+  return row.id;
+}
+async function saveContact(data, id){
+  const payload = {...data};
+  if (id){ payload.updated_at = new Date().toISOString(); const { error } = await sb.from('contacts').update(payload).eq('id', id); if(error) throw error; return id; }
+  payload.created_by = state.me.displayName;
+  const { data: row, error } = await sb.from('contacts').insert(payload).select().single();
+  if (error) throw error;
+  return row.id;
+}
+async function saveDeal(data, id){
+  const payload = {...data};
+  if (id){ payload.updated_at = new Date().toISOString(); const { error } = await sb.from('deals').update(payload).eq('id', id); if(error) throw error; return id; }
+  payload.created_by = state.me.displayName; payload.updated_at = new Date().toISOString();
+  const { data: row, error } = await sb.from('deals').insert(payload).select().single();
+  if (error) throw error;
+  return row.id;
+}
+async function setDealStage(deal, newStage){
+  const { error } = await sb.from('deals').update({ stage:newStage, updated_at:new Date().toISOString() }).eq('id', deal.id);
+  if (error) { toast(error.message, true); return; }
+  await addActivity('deal', deal.id, 'stage-change', `Stage changed to "${stageMeta(newStage).label}"`);
+}
+async function callManageUser(body){
+  const { data, error } = await sb.functions.invoke('manage-user', { body });
+  if (error) {
+    let msg = error.message;
+    try { const ctx = await error.context.json(); if (ctx.error) msg = ctx.error; } catch(e){}
+    throw new Error(msg);
+  }
+  if (data && data.error) throw new Error(data.error);
+  return data;
+}
+
+/* ---------------- router ---------------- */
+function navigate(route, detail){
+  if (detail && (!state.detail || state.detail.type!==detail.type || state.detail.id!==detail.id)){
+    drawerTab = 'overview';
+  }
+  state.route = route; state.detail = detail || null; state.sidebarOpen = false;
+  render();
+}
+
+/* ---------------- render root ---------------- */
+function rerenderMain(renderFn, bindFn){
+  const main = document.getElementById('main');
+  if (!main) return;
+  const active = document.activeElement;
+  let restoreId = null, selStart = null, selEnd = null;
+  if (active && active.id && main.contains(active)){
+    restoreId = active.id;
+    if (typeof active.selectionStart === 'number'){ selStart = active.selectionStart; selEnd = active.selectionEnd; }
+  }
+  main.innerHTML = renderFn();
+  bindFn();
+  if (restoreId){
+    const el = document.getElementById(restoreId);
+    if (el){ el.focus(); if (selStart !== null && el.setSelectionRange){ try{ el.setSelectionRange(selStart, selEnd); }catch(e){} } }
+  }
+}
+function render(){
+  const app = document.getElementById('app');
+  if (!state.authed){ app.innerHTML = renderLogin(); bindLogin(); return; }
+  app.innerHTML = renderShell();
+  bindShell();
+}
+
+/* ---------------- LOGIN VIEW ---------------- */
+function renderLogin(){
+  return `
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="mark">FL</div>
+      <h1>Fourlytic Pipeline</h1>
+      <p class="lead">Internal CRM — sign in with your team account.</p>
+      <div class="login-err" id="loginErr"></div>
+      <form id="loginForm">
+        <div class="field"><label>Username</label><input id="loginUser" autocomplete="username" autofocus></div>
+        <div class="field"><label>Password</label><input id="loginPass" type="password" autocomplete="current-password"></div>
+        <button class="btn btn-primary" type="submit">Sign in</button>
+      </form>
+      <div class="login-hint">Internal tool for the Fourlytic team. Contact an admin if you don't have an account yet.</div>
+    </div>
+  </div>`;
+}
+function bindLogin(){
+  const form = document.getElementById('loginForm');
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const u = document.getElementById('loginUser').value;
+    const p = document.getElementById('loginPass').value;
+    const errBox = document.getElementById('loginErr');
+    errBox.classList.remove('show');
+    const btn = form.querySelector('button');
+    btn.disabled = true; btn.textContent = 'Signing in…';
+    const res = await tryLogin(u,p);
+    if (!res.ok){
+      errBox.textContent = res.msg; errBox.classList.add('show');
+      btn.disabled=false; btn.textContent='Sign in';
+      return;
+    }
+  });
+}
+
+/* ---------------- APP SHELL ---------------- */
+function navIcon(path){ return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`; }
+const ICONS = {
+  pipeline: navIcon('<rect x="3" y="4" width="4" height="16"/><rect x="10" y="8" width="4" height="12"/><rect x="17" y="2" width="4" height="18"/>'),
+  contacts: navIcon('<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-7 8-7s8 3 8 7"/>'),
+  companies: navIcon('<path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 9h.01M9 13h.01M15 9h.01M15 13h.01"/>'),
+  admin: navIcon('<circle cx="12" cy="8" r="3"/><path d="M5 21v-1a7 7 0 0114 0v1"/><path d="M3 7l2 2M21 7l-2 2"/>'),
+  menu: navIcon('<line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/>'),
+  close: navIcon('<line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/>'),
+  search: navIcon('<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'),
+  plus: navIcon('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>'),
+};
+function renderShell(){
+  const navItems = [
+    {id:'pipeline', label:'Pipeline', icon:ICONS.pipeline},
+    {id:'contacts', label:'Contacts', icon:ICONS.contacts},
+    {id:'companies', label:'Companies', icon:ICONS.companies},
+  ];
+  return `
+  <div class="shell">
+    <nav class="sidebar ${state.sidebarOpen?'open':''}" id="sidebar">
+      <div class="brand"><div class="mark">FL</div><div class="name">Fourlytic Pipeline</div></div>
+      <div class="nav">
+        ${navItems.map(n=>`<button data-route="${n.id}" class="${state.route===n.id?'active':''}">${n.icon}${n.label}</button>`).join('')}
+        ${isAdmin()?`<div class="section-label">Admin</div><button data-route="admin" class="${state.route==='admin'?'active':''}">${ICONS.admin}Admin Panel</button>`:''}
+      </div>
+      <div class="sidebar-footer">
+        <div class="me">
+          <div class="avatar">${initials(state.me.displayName)}</div>
+          <div class="who"><div class="n">${esc(state.me.displayName)}</div><div class="r">${esc(state.me.role)}</div></div>
+        </div>
+        <button class="logout-btn" id="logoutBtn">Sign out</button>
+      </div>
+    </nav>
+    <div class="main" id="main">${renderPage()}</div>
+  </div>
+  ${state.detail ? renderDetailDrawer() : ''}
+  `;
+}
+function bindShell(){
+  document.querySelectorAll('.nav button[data-route]').forEach(b=> b.addEventListener('click', ()=> navigate(b.dataset.route)));
+  const lo = document.getElementById('logoutBtn'); if (lo) lo.addEventListener('click', logout);
+  const menuBtn = document.getElementById('menuBtn');
+  if (menuBtn) menuBtn.addEventListener('click', ()=>{ state.sidebarOpen = !state.sidebarOpen; render(); });
+  bindPage();
+  if (state.detail) bindDetailDrawer();
+}
+
+function renderPage(){
+  switch(state.route){
+    case 'contacts': return renderContactsPage();
+    case 'companies': return renderCompaniesPage();
+    case 'admin': return isAdmin() ? renderAdminPage() : renderPipelinePage();
+    default: return renderPipelinePage();
+  }
+}
+function bindPage(){
+  switch(state.route){
+    case 'contacts': return bindContactsPage();
+    case 'companies': return bindCompaniesPage();
+    case 'admin': return isAdmin() ? bindAdminPage() : bindPipelinePage();
+    default: return bindPipelinePage();
+  }
+}
+function topbar(title, sub, actionsHtml){
+  return `<div class="topbar">
+    <div style="display:flex; align-items:center;">
+      <button class="menu-btn" id="menuBtn">${ICONS.menu}</button>
+      <div><h1>${title}</h1>${sub?`<div class="sub">${sub}</div>`:''}</div>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center;">${actionsHtml||''}</div>
+  </div>`;
+}
+
+/* ---------------- PIPELINE PAGE ---------------- */
+function renderPipelinePage(){
+  const loading = !state.loaded.deals || !state.loaded.contacts || !state.loaded.companies;
+  const counts = {}; STAGES.forEach(s=>counts[s.id]=0);
+  state.deals.forEach(d=>{ if(counts[d.stage]!==undefined) counts[d.stage]++; });
+  const total = state.deals.length;
+  const wonVal = state.deals.filter(d=>d.stage==='won').length;
+  const lostVal = state.deals.filter(d=>d.stage==='lost').length;
+  const active = total - wonVal - lostVal;
+  return `
+    ${topbar('Pipeline', `${total} deal${total!==1?'s':''} total · ${active} active`, `
+      <div class="search">${ICONS.search}<input id="pipelineSearch" placeholder="Search deals…" value="${esc(state.search)}"></div>
+      <button class="btn btn-primary" id="newDealBtn">${ICONS.plus}New Deal</button>
+    `)}
+    ${loading ? `<div class="empty-state"><div class="big">⏳</div>Loading pipeline…</div>` : `
+    <div class="board">${STAGES.map(st=>renderColumn(st, counts[st.id])).join('')}</div>`}
+  `;
+}
+function renderColumn(st, count){
+  const q = state.search.trim().toLowerCase();
+  let deals = state.deals.filter(d=>d.stage===st.id);
+  if (q){
+    deals = deals.filter(d=>{
+      const c = contactById(d.contact_id); const co = companyById(d.company_id);
+      const hay = [d.deal_name, c?contactName(c):'', co?co.name:''].join(' ').toLowerCase();
+      return hay.includes(q);
+    });
+  }
+  return `
+  <div class="col">
+    <div class="col-head"><div class="t"><span class="dot" style="background:${st.color}"></span>${st.label}</div><span class="count">${count}</span></div>
+    <div class="col-body">${deals.length===0 ? `<div class="col-empty">No deals</div>` : deals.map(d=>renderDealCard(d)).join('')}</div>
+  </div>`;
+}
+function renderDealCard(d){
+  const c = contactById(d.contact_id);
+  const co = companyById(d.company_id);
+  const owner = c ? c.lead_owner : null;
+  return `
+  <div class="deal-card" data-deal="${d.id}">
+    <div class="dn">${esc(d.deal_name||'Untitled deal')}</div>
+    <div class="dc">${esc(co?co.name:'—')}${c?' · '+esc(contactName(c)):''}</div>
+    <div class="meta">
+      <span class="rate tabular">${d.rate?('$'+d.rate+(d.rate_type==='Hourly'?'/hr':'/yr')):'—'}</span>
+      ${owner?`<span class="owner" title="${esc(owner)}">${initials(owner)}</span>`:''}
+    </div>
+  </div>`;
+}
+function bindPipelinePage(){
+  const s = document.getElementById('pipelineSearch');
+  if (s) s.addEventListener('input', ()=>{ state.search = s.value; rerenderMain(renderPipelinePage, bindPipelinePage); });
+  document.querySelectorAll('.deal-card').forEach(el=> el.addEventListener('click', ()=> navigate(state.route, {type:'deal', id:el.dataset.deal})));
+  const nb = document.getElementById('newDealBtn');
+  if (nb) nb.addEventListener('click', ()=> openDealModal());
+}
+
+/* ---------------- CONTACTS PAGE ---------------- */
+function renderContactsPage(){
+  const q = state.search.trim().toLowerCase();
+  let list = state.contacts.slice().sort((a,b)=> (a.first_name||'').localeCompare(b.first_name||''));
+  if (q) list = list.filter(c=> (contactName(c)+' '+(c.email||'')+' '+(companyById(c.company_id)?.name||'')).toLowerCase().includes(q));
+  return `
+    ${topbar('Contacts', `${state.contacts.length} contact${state.contacts.length!==1?'s':''}`, `
+      <div class="search">${ICONS.search}<input id="contactsSearch" placeholder="Search contacts…" value="${esc(state.search)}"></div>
+      <button class="btn btn-primary" id="newContactBtn">${ICONS.plus}New Contact</button>
+    `)}
+    ${!state.loaded.contacts ? `<div class="empty-state"><div class="big">⏳</div>Loading…</div>` :
+      list.length===0 ? `<div class="table-wrap"><div class="empty-state"><div class="big">👤</div>No contacts yet. Add the first one.</div></div>` :
+      `<div class="table-wrap"><table>
+        <thead><tr><th>Name</th><th>Company</th><th>Email</th><th>Phone</th><th>Lead Owner</th><th>Location</th></tr></thead>
+        <tbody>
+          ${list.map(c=>{
+            const co = companyById(c.company_id);
+            return `<tr class="row-click" data-contact="${c.id}">
+              <td class="name-cell">${esc(contactName(c))}</td>
+              <td>${co?esc(co.name):'<span class="faint">—</span>'}</td>
+              <td class="muted">${esc(c.email)||'<span class="faint">—</span>'}</td>
+              <td class="muted">${esc(c.phone)||'<span class="faint">—</span>'}</td>
+              <td>${c.lead_owner?`<span class="pill" style="background:var(--accent-soft); color:var(--accent);">${esc(c.lead_owner)}</span>`:'<span class="faint">—</span>'}</td>
+              <td class="muted">${esc(c.location)||'<span class="faint">—</span>'}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table></div>`}
+  `;
+}
+function bindContactsPage(){
+  const s = document.getElementById('contactsSearch');
+  if (s) s.addEventListener('input', ()=>{ state.search = s.value; rerenderMain(renderContactsPage, bindContactsPage); });
+  document.querySelectorAll('tr[data-contact]').forEach(el=> el.addEventListener('click', ()=> navigate('contacts', {type:'contact', id:el.dataset.contact})));
+  const nb = document.getElementById('newContactBtn');
+  if (nb) nb.addEventListener('click', ()=> openContactModal());
+}
+
+/* ---------------- COMPANIES PAGE ---------------- */
+function renderCompaniesPage(){
+  const q = state.search.trim().toLowerCase();
+  let list = state.companies.slice().sort((a,b)=> (a.name||'').localeCompare(b.name||''));
+  if (q) list = list.filter(c=> (c.name+' '+(c.location||'')).toLowerCase().includes(q));
+  return `
+    ${topbar('Companies', `${state.companies.length} compan${state.companies.length!==1?'ies':'y'}`, `
+      <div class="search">${ICONS.search}<input id="companiesSearch" placeholder="Search companies…" value="${esc(state.search)}"></div>
+      <button class="btn btn-primary" id="newCompanyBtn">${ICONS.plus}New Company</button>
+    `)}
+    ${!state.loaded.companies ? `<div class="empty-state"><div class="big">⏳</div>Loading…</div>` :
+      list.length===0 ? `<div class="table-wrap"><div class="empty-state"><div class="big">🏢</div>No companies yet. Add the first one.</div></div>` :
+      `<div class="table-wrap"><table>
+        <thead><tr><th>Name</th><th>Location</th><th>Website</th><th>Contacts</th></tr></thead>
+        <tbody>
+          ${list.map(c=>{
+            const n = state.contacts.filter(x=>x.company_id===c.id).length;
+            return `<tr class="row-click" data-company="${c.id}">
+              <td class="name-cell">${esc(c.name)}</td>
+              <td class="muted">${esc(c.location)||'<span class="faint">—</span>'}</td>
+              <td class="muted">${c.website?esc(c.website):'<span class="faint">—</span>'}</td>
+              <td class="muted">${n}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table></div>`}
+  `;
+}
+function bindCompaniesPage(){
+  const s = document.getElementById('companiesSearch');
+  if (s) s.addEventListener('input', ()=>{ state.search = s.value; rerenderMain(renderCompaniesPage, bindCompaniesPage); });
+  document.querySelectorAll('tr[data-company]').forEach(el=> el.addEventListener('click', ()=> navigate('companies', {type:'company', id:el.dataset.company})));
+  const nb = document.getElementById('newCompanyBtn');
+  if (nb) nb.addEventListener('click', ()=> openCompanyModal());
+}
+
+/* ---------------- ADMIN PAGE ---------------- */
+function renderAdminPage(){
+  const admins = state.users.filter(u=>u.role==='admin').length;
+  const execs = state.users.filter(u=>u.role==='sales').length;
+  return `
+    ${topbar('Admin Panel', 'Manage team accounts and access', `<button class="btn btn-primary" id="newUserBtn">${ICONS.plus}New User</button>`)}
+    <div class="stat-row">
+      <div class="stat"><div class="num tabular">${state.users.length}</div><div class="lbl">Team accounts</div></div>
+      <div class="stat"><div class="num tabular">${admins}</div><div class="lbl">Admins</div></div>
+      <div class="stat"><div class="num tabular">${execs}</div><div class="lbl">Sales executives</div></div>
+      <div class="stat"><div class="num tabular">${state.deals.length}</div><div class="lbl">Total deals</div></div>
+    </div>
+    <div class="card" style="padding:16px 18px;">
+      ${state.users.length===0 ? `<div class="empty-state">No users yet.</div>` :
+        state.users.map(u=>`
+        <div class="user-row">
+          <div class="avatar">${initials(u.display_name)}</div>
+          <div class="info">
+            <div class="n">${esc(u.display_name)} ${u.active===false?'<span class="pill" style="background:var(--bad-soft);color:var(--bad);">inactive</span>':''}</div>
+            <div class="u">@${esc(u.username)}</div>
+          </div>
+          <span class="badge badge-${u.role==='admin'?'admin':'sales'}">${esc(u.role)}</span>
+          <button class="btn btn-ghost btn-sm" data-edit-user="${u.id}">Edit</button>
+        </div>`).join('')}
+    </div>
+  `;
+}
+function bindAdminPage(){
+  const nb = document.getElementById('newUserBtn');
+  if (nb) nb.addEventListener('click', ()=> openUserModal());
+  document.querySelectorAll('[data-edit-user]').forEach(b=> b.addEventListener('click', ()=> openUserModal(userById(b.dataset.editUser))));
+}
+
+/* ---------------- DETAIL DRAWER ---------------- */
+let drawerTab = 'overview';
+function renderDetailDrawer(){
+  const {type, id} = state.detail;
+  let obj, title, sub;
+  if (type==='contact'){ obj = contactById(id); title = obj?contactName(obj):'Contact'; sub = obj&&companyById(obj.company_id)?companyById(obj.company_id).name:''; }
+  else if (type==='company'){ obj = companyById(id); title = obj?obj.name:'Company'; sub = obj?.location||''; }
+  else if (type==='deal'){ obj = dealById(id); title = obj?obj.deal_name:'Deal'; sub = obj?stageMeta(obj.stage).label:''; }
+  if (!obj){
+    return `<div class="overlay" id="drawerOverlay"><div class="drawer"><div class="drawer-head"><div><h2>Not found</h2></div><button class="icon-btn" id="closeDrawer">${ICONS.close}</button></div></div></div>`;
+  }
+  return `
+  <div class="overlay" id="drawerOverlay">
+    <div class="drawer">
+      <div class="drawer-head">
+        <div><h2>${esc(title)}</h2><div class="sub">${esc(sub)}</div></div>
+        <div style="display:flex; gap:6px;">
+          <button class="icon-btn" id="editDetailBtn" title="Edit">✎</button>
+          <button class="icon-btn" id="closeDrawer">${ICONS.close}</button>
+        </div>
+      </div>
+      <div class="drawer-body">${renderDetailTabs(type)}<div id="tabContent">${renderDetailTabContent(type, obj)}</div></div>
+    </div>
+  </div>`;
+}
+function renderDetailTabs(type){
+  const tabs = type==='deal'
+    ? [['overview','Overview'],['activity','Activity'],['tasks','Tasks']]
+    : [['overview','Overview'],['notes','Notes'],['activity','Activity'],['tasks','Tasks'],['deals','Deals']];
+  return `<div class="tabs">${tabs.map(([k,l])=>`<button class="tab ${drawerTab===k?'active':''}" data-tab="${k}">${l}</button>`).join('')}</div>`;
+}
+function renderDetailTabContent(type, obj){
+  if (drawerTab==='overview') return renderOverviewTab(type, obj);
+  if (drawerTab==='notes') return renderActivityTab(type, obj, 'note');
+  if (drawerTab==='activity') return renderActivityTab(type, obj, null);
+  if (drawerTab==='tasks') return renderTasksTab(type, obj);
+  if (drawerTab==='deals') return renderRelatedDealsTab(type, obj);
+  return '';
+}
+function kv(label, value){ return `<div class="k">${label}</div><div class="v">${value}</div>`; }
+function renderOverviewTab(type, obj){
+  if (type==='contact'){
+    const co = companyById(obj.company_id);
+    return `<div class="kv">
+      ${kv('First name', esc(obj.first_name)||'—')}
+      ${kv('Last name', esc(obj.last_name)||'—')}
+      ${kv('Email', obj.email?`<a href="mailto:${esc(obj.email)}">${esc(obj.email)}</a>`:'—')}
+      ${kv('Phone', esc(obj.phone)||'—')}
+      ${kv('Company', co?esc(co.name):'—')}
+      ${kv('Lead owner', esc(obj.lead_owner)||'—')}
+      ${kv('Pseudo profile', esc(obj.pseudo_profile_name)||'—')}
+      ${kv('Location', esc(obj.location)||'—')}
+      ${kv('Connected', esc(obj.connected_info)||'—')}
+      ${kv('Recruiter LinkedIn', obj.recruiter_linkedin?`<a href="${esc(obj.recruiter_linkedin)}" target="_blank" rel="noopener">${esc(obj.recruiter_linkedin)}</a>`:'—')}
+      ${kv('Company LinkedIn', obj.company_linkedin?`<a href="${esc(obj.company_linkedin)}" target="_blank" rel="noopener">${esc(obj.company_linkedin)}</a>`:'—')}
+      ${kv('Added', fmtDate(obj.created_at))}
+    </div>`;
+  }
+  if (type==='company'){
+    return `<div class="kv">
+      ${kv('Name', esc(obj.name))}
+      ${kv('LinkedIn', obj.linkedin?`<a href="${esc(obj.linkedin)}" target="_blank" rel="noopener">${esc(obj.linkedin)}</a>`:'—')}
+      ${kv('Website', obj.website?`<a href="${esc(obj.website)}" target="_blank" rel="noopener">${esc(obj.website)}</a>`:'—')}
+      ${kv('Location', esc(obj.location)||'—')}
+      ${kv('Notes', esc(obj.notes)||'—')}
+      ${kv('Added', fmtDate(obj.created_at))}
+    </div>`;
+  }
+  if (type==='deal'){
+    const co = companyById(obj.company_id); const c = contactById(obj.contact_id);
+    return `
+    <div style="margin-bottom:16px;">
+      <label style="font-size:11.5px; font-weight:600; color:var(--fg-muted); display:block; margin-bottom:6px;">Stage</label>
+      <select id="stageSelect" style="width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface-2);">
+        ${STAGES.map(s=>`<option value="${s.id}" ${s.id===obj.stage?'selected':''}>${s.label}</option>`).join('')}
+      </select>
+    </div>
+    <div class="kv">
+      ${kv('Company', co?esc(co.name):'—')}
+      ${kv('Contact', c?esc(contactName(c)):'—')}
+      ${kv('Date', fmtDate(obj.date))}
+      ${kv('Rate', obj.rate?('$'+esc(obj.rate)+' '+(esc(obj.rate_type)||'')):'—')}
+      ${kv('Source', esc(obj.source)||'—')}
+      ${kv('Job type', esc(obj.job_type)||'—')}
+      ${kv('HR call by', esc(obj.hr_call_by)||'—')}
+      ${kv('Interview by', esc(obj.interview_by)||'—')}
+      ${kv('Drop reason', esc(obj.position_drop_reason)||'—')}
+      ${kv('Notes', esc(obj.notes)||'—')}
+      ${kv('Created', fmtDate(obj.created_at))}
+      ${kv('Updated', fmtDate(obj.updated_at))}
+    </div>`;
+  }
+  return '';
+}
+function renderActivityTab(type, obj, kindFilter){
+  const items = state.activities
+    .filter(a=>a.parent_type===type && a.parent_id===obj.id && (!kindFilter || a.kind===kindFilter))
+    .sort((a,b)=> new Date(b.at)-new Date(a.at));
+  return `
+  <div class="section-title">${kindFilter==='note'?'Add a note':'Log activity'}</div>
+  <textarea class="note-input" id="activityInput" placeholder="${kindFilter==='note'?'Write a note…':'What happened? (call, email, update…)'}"></textarea>
+  <div class="inline-form">
+    ${!kindFilter?`<select id="activityKind">
+      <option value="general">General</option><option value="call">Call</option><option value="email">Email</option><option value="conversation">Conversation</option>
+    </select>`:''}
+    <button class="btn btn-primary btn-sm" id="addActivityBtn">Add</button>
+  </div>
+  <div class="section-title">History</div>
+  ${items.length===0?`<div class="empty-state" style="padding:24px 0;">Nothing logged yet.</div>`:
+    items.map(a=>`<div class="act-item"><div class="dot"></div><div class="body"><div class="txt">${esc(a.text)}</div><div class="meta">${esc(a.by)} · ${fmtDateTime(a.at)}${a.kind&&a.kind!=='general'&&a.kind!=='note'?' · '+esc(a.kind):''}</div></div></div>`).join('')}
+  `;
+}
+function renderTasksTab(type, obj){
+  const items = state.tasks.filter(t=>t.parent_type===type && t.parent_id===obj.id)
+    .sort((a,b)=> (a.done-b.done) || new Date(a.due_date||0)-new Date(b.due_date||0));
+  return `
+  <div class="section-title">New task</div>
+  <div class="inline-form">
+    <input id="taskTitle" placeholder="Task title…">
+    <input id="taskDue" type="date">
+    <button class="btn btn-primary btn-sm" id="addTaskBtn">Add</button>
+  </div>
+  <div class="section-title">Tasks</div>
+  ${items.length===0?`<div class="empty-state" style="padding:24px 0;">No tasks yet.</div>`:
+    items.map(t=>`<div class="task-item ${t.done?'done':''}">
+      <input type="checkbox" data-task="${t.id}" ${t.done?'checked':''}>
+      <div><div class="tt">${esc(t.title)}</div><div class="tm">${t.due_date?('Due '+fmtDate(t.due_date)):'No due date'} · ${esc(t.assigned_to)}</div></div>
+    </div>`).join('')}
+  `;
+}
+function renderRelatedDealsTab(type, obj){
+  const deals = state.deals.filter(d=> type==='contact' ? d.contact_id===obj.id : d.company_id===obj.id);
+  return deals.length===0 ? `<div class="empty-state" style="padding:24px 0;">No deals linked yet.</div>` :
+    `<div style="display:flex; flex-direction:column; gap:9px;">${deals.map(d=>`
+      <div class="deal-card" data-deal-link="${d.id}"><div class="dn">${esc(d.deal_name)}</div><div class="dc">${stageMeta(d.stage).label}</div></div>`).join('')}</div>`;
+}
+function bindDetailDrawer(){
+  const ov = document.getElementById('drawerOverlay');
+  ov.addEventListener('click', (e)=>{ if (e.target===ov) closeDrawer(); });
+  const cb = document.getElementById('closeDrawer'); if (cb) cb.addEventListener('click', closeDrawer);
+  const eb = document.getElementById('editDetailBtn');
+  if (eb) eb.addEventListener('click', ()=>{
+    const {type,id} = state.detail;
+    if (type==='contact') openContactModal(contactById(id));
+    if (type==='company') openCompanyModal(companyById(id));
+    if (type==='deal') openDealModal(dealById(id));
+  });
+  document.querySelectorAll('.tab[data-tab]').forEach(t=> t.addEventListener('click', ()=>{ drawerTab = t.dataset.tab; rerenderDrawer(); }));
+  document.querySelectorAll('[data-deal-link]').forEach(el=> el.addEventListener('click', ()=> navigate(state.route, {type:'deal', id:el.dataset.dealLink})));
+  const stageSel = document.getElementById('stageSelect');
+  if (stageSel) stageSel.addEventListener('change', async ()=>{ await setDealStage(dealById(state.detail.id), stageSel.value); toast('Stage updated'); });
+  const addAct = document.getElementById('addActivityBtn');
+  if (addAct) addAct.addEventListener('click', async ()=>{
+    const txt = document.getElementById('activityInput').value;
+    const kindSel = document.getElementById('activityKind');
+    const kind = drawerTab==='notes' ? 'note' : (kindSel?kindSel.value:'general');
+    if (!txt.trim()) return;
+    await addActivity(state.detail.type, state.detail.id, kind, txt);
+    toast('Added'); rerenderDrawer();
+  });
+  const addTaskBtn = document.getElementById('addTaskBtn');
+  if (addTaskBtn) addTaskBtn.addEventListener('click', async ()=>{
+    const title = document.getElementById('taskTitle').value;
+    const due = document.getElementById('taskDue').value;
+    if (!title.trim()) return;
+    await addTask(state.detail.type, state.detail.id, title, due);
+    toast('Task added'); rerenderDrawer();
+  });
+  document.querySelectorAll('[data-task]').forEach(cb=> cb.addEventListener('change', async ()=>{ await toggleTask(state.tasks.find(t=>t.id===cb.dataset.task)); }));
+}
+function closeDrawer(){ state.detail = null; drawerTab='overview'; render(); }
+function rerenderDrawer(){
+  const existing = document.getElementById('drawerOverlay');
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = renderDetailDrawer();
+  if (existing) existing.replaceWith(wrapper.firstElementChild);
+  bindDetailDrawer();
+}
+
+/* ---------------- MODALS ---------------- */
+function openModal(html, onBind){
+  const wrap = document.createElement('div');
+  wrap.className = 'modal-overlay'; wrap.id = 'modalOverlay';
+  wrap.innerHTML = `<div class="modal">${html}</div>`;
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click', e=>{ if (e.target===wrap) closeModal(); });
+  onBind(wrap);
+}
+function closeModal(){ const m = document.getElementById('modalOverlay'); if (m) m.remove(); }
+
+function openCompanyModal(existing){
+  const isEdit = !!existing;
+  const html = `
+    <h3>${isEdit?'Edit company':'New company'}</h3>
+    <div class="form-grid">
+      <div class="full"><label>Company name *</label><input id="f_name" value="${esc(existing?.name)}"></div>
+      <div><label>Location</label><input id="f_location" value="${esc(existing?.location)}"></div>
+      <div><label>Website</label><input id="f_website" value="${esc(existing?.website)}"></div>
+      <div><label>Company LinkedIn</label><input id="f_linkedin" value="${esc(existing?.linkedin)}"></div>
+      <div class="full"><label>Notes</label><textarea id="f_notes">${esc(existing?.notes)}</textarea></div>
+    </div>
+    <div class="modal-actions"><button class="btn btn-ghost" id="cancelBtn">Cancel</button><button class="btn btn-primary" id="saveBtn">${isEdit?'Save changes':'Create company'}</button></div>`;
+  openModal(html, (wrap)=>{
+    wrap.querySelector('#cancelBtn').addEventListener('click', closeModal);
+    wrap.querySelector('#saveBtn').addEventListener('click', async ()=>{
+      const name = wrap.querySelector('#f_name').value.trim();
+      if (!name) return toast('Company name is required', true);
+      const data = { name, location: wrap.querySelector('#f_location').value.trim(), website: wrap.querySelector('#f_website').value.trim(), linkedin: wrap.querySelector('#f_linkedin').value.trim(), notes: wrap.querySelector('#f_notes').value.trim() };
+      try{
+        const id = await saveCompany(data, existing?.id);
+        closeModal(); toast(isEdit?'Company updated':'Company created');
+        if (!isEdit) navigate('companies', {type:'company', id}); else rerenderDrawer();
+      }catch(e){ toast(e.message, true); }
+    });
+  });
+}
+
+function openContactModal(existing){
+  const isEdit = !!existing;
+  const coOptions = state.companies.map(c=>`<option value="${c.id}" ${existing?.company_id===c.id?'selected':''}>${esc(c.name)}</option>`).join('');
+  const owners = Array.from(new Set(state.users.map(u=>u.display_name)));
+  const html = `
+    <h3>${isEdit?'Edit contact':'New contact'}</h3>
+    <div class="form-grid">
+      <div><label>First name *</label><input id="f_fn" value="${esc(existing?.first_name)}"></div>
+      <div><label>Last name</label><input id="f_ln" value="${esc(existing?.last_name)}"></div>
+      <div><label>Email</label><input id="f_email" value="${esc(existing?.email)}"></div>
+      <div><label>Phone</label><input id="f_phone" value="${esc(existing?.phone)}"></div>
+      <div class="full"><label>Company</label><select id="f_company"><option value="">—</option>${coOptions}</select></div>
+      <div><label>Lead owner</label><select id="f_owner"><option value="">—</option>${owners.map(o=>`<option ${existing?.lead_owner===o?'selected':''}>${esc(o)}</option>`).join('')}</select></div>
+      <div><label>Pseudo profile name</label><input id="f_pseudo" value="${esc(existing?.pseudo_profile_name)}"></div>
+      <div><label>Location</label><input id="f_loc" value="${esc(existing?.location)}"></div>
+      <div><label>Connected contacts/company</label><input id="f_connected" value="${esc(existing?.connected_info)}"></div>
+      <div><label>Recruiter LinkedIn</label><input id="f_rli" value="${esc(existing?.recruiter_linkedin)}"></div>
+      <div class="full"><label>Company LinkedIn</label><input id="f_cli" value="${esc(existing?.company_linkedin)}"></div>
+    </div>
+    <div class="modal-actions"><button class="btn btn-ghost" id="cancelBtn">Cancel</button><button class="btn btn-primary" id="saveBtn">${isEdit?'Save changes':'Create contact'}</button></div>`;
+  openModal(html, (wrap)=>{
+    wrap.querySelector('#cancelBtn').addEventListener('click', closeModal);
+    wrap.querySelector('#saveBtn').addEventListener('click', async ()=>{
+      const fn = wrap.querySelector('#f_fn').value.trim();
+      if (!fn) return toast('First name is required', true);
+      const data = {
+        first_name: fn, last_name: wrap.querySelector('#f_ln').value.trim(),
+        email: wrap.querySelector('#f_email').value.trim(), phone: wrap.querySelector('#f_phone').value.trim(),
+        company_id: wrap.querySelector('#f_company').value || null, lead_owner: wrap.querySelector('#f_owner').value || null,
+        pseudo_profile_name: wrap.querySelector('#f_pseudo').value.trim(), location: wrap.querySelector('#f_loc').value.trim(),
+        connected_info: wrap.querySelector('#f_connected').value.trim(), recruiter_linkedin: wrap.querySelector('#f_rli').value.trim(),
+        company_linkedin: wrap.querySelector('#f_cli').value.trim(),
+      };
+      try{
+        const id = await saveContact(data, existing?.id);
+        closeModal(); toast(isEdit?'Contact updated':'Contact created');
+        if (!isEdit) navigate('contacts', {type:'contact', id}); else rerenderDrawer();
+      }catch(e){ toast(e.message, true); }
+    });
+  });
+}
+
+function openDealModal(existing){
+  const isEdit = !!existing;
+  const coOptions = state.companies.map(c=>`<option value="${c.id}" ${existing?.company_id===c.id?'selected':''}>${esc(c.name)}</option>`).join('');
+  const ctOptions = state.contacts.map(c=>`<option value="${c.id}" ${existing?.contact_id===c.id?'selected':''}>${esc(contactName(c))}</option>`).join('');
+  const html = `
+    <h3>${isEdit?'Edit deal':'New deal'}</h3>
+    <div class="form-grid">
+      <div class="full"><label>Deal name *</label><input id="f_name" value="${esc(existing?.deal_name)}"></div>
+      <div><label>Company</label><select id="f_company"><option value="">—</option>${coOptions}</select></div>
+      <div><label>Contact</label><select id="f_contact"><option value="">—</option>${ctOptions}</select></div>
+      <div><label>Date</label><input id="f_date" type="date" value="${existing?.date||''}"></div>
+      <div><label>Stage</label><select id="f_stage">${STAGES.map(s=>`<option value="${s.id}" ${existing?.stage===s.id?'selected':''}>${s.label}</option>`).join('')}</select></div>
+      <div><label>Rate</label><input id="f_rate" type="number" value="${existing?.rate||''}"></div>
+      <div><label>Rate type</label><select id="f_ratetype">${RATE_TYPES.map(r=>`<option ${existing?.rate_type===r?'selected':''}>${r}</option>`).join('')}</select></div>
+      <div><label>Source</label><select id="f_source"><option value="">—</option>${SOURCES.map(s=>`<option ${existing?.source===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div><label>Job type</label><select id="f_jobtype"><option value="">—</option>${JOB_TYPES.map(s=>`<option ${existing?.job_type===s?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div><label>HR call by</label><input id="f_hrcall" value="${esc(existing?.hr_call_by)}"></div>
+      <div><label>Interview by</label><input id="f_interviewby" value="${esc(existing?.interview_by)}"></div>
+      <div class="full"><label>Position drop reason</label><input id="f_dropreason" value="${esc(existing?.position_drop_reason)}"></div>
+      <div class="full"><label>Notes</label><textarea id="f_notes">${esc(existing?.notes)}</textarea></div>
+    </div>
+    <div class="modal-actions"><button class="btn btn-ghost" id="cancelBtn">Cancel</button><button class="btn btn-primary" id="saveBtn">${isEdit?'Save changes':'Create deal'}</button></div>`;
+  openModal(html, (wrap)=>{
+    wrap.querySelector('#cancelBtn').addEventListener('click', closeModal);
+    wrap.querySelector('#saveBtn').addEventListener('click', async ()=>{
+      const name = wrap.querySelector('#f_name').value.trim();
+      if (!name) return toast('Deal name is required', true);
+      const data = {
+        deal_name: name, company_id: wrap.querySelector('#f_company').value || null, contact_id: wrap.querySelector('#f_contact').value || null,
+        date: wrap.querySelector('#f_date').value || null, stage: wrap.querySelector('#f_stage').value,
+        rate: wrap.querySelector('#f_rate').value ? Number(wrap.querySelector('#f_rate').value) : null, rate_type: wrap.querySelector('#f_ratetype').value,
+        source: wrap.querySelector('#f_source').value, job_type: wrap.querySelector('#f_jobtype').value,
+        hr_call_by: wrap.querySelector('#f_hrcall').value.trim(), interview_by: wrap.querySelector('#f_interviewby').value.trim(),
+        position_drop_reason: wrap.querySelector('#f_dropreason').value.trim(), notes: wrap.querySelector('#f_notes').value.trim(),
+      };
+      try{
+        const id = await saveDeal(data, existing?.id);
+        closeModal(); toast(isEdit?'Deal updated':'Deal created');
+        navigate(state.route, {type:'deal', id});
+      }catch(e){ toast(e.message, true); }
+    });
+  });
+}
+
+function openUserModal(existing){
+  const isEdit = !!existing;
+  const html = `
+    <h3>${isEdit?'Edit user':'New user'}</h3>
+    <div class="form-grid">
+      <div><label>Display name *</label><input id="f_dn" value="${esc(existing?.display_name)}"></div>
+      <div><label>Username *</label><input id="f_un" value="${esc(existing?.username)}" ${isEdit?'disabled':''}></div>
+      ${!isEdit?`<div class="full"><label>Email *</label><input id="f_email" placeholder="e.g. ali@fourlytic.com"></div>`:''}
+      <div><label>${isEdit?'New password (leave blank to keep)':'Password *'}</label><input id="f_pw" type="text"></div>
+      <div><label>Role</label><select id="f_role"><option value="sales" ${existing?.role==='sales'?'selected':''}>Sales Executive</option><option value="admin" ${existing?.role==='admin'?'selected':''}>Admin</option></select></div>
+      ${isEdit?`<div class="full"><label><input type="checkbox" id="f_active" ${existing.active!==false?'checked':''} style="width:auto; margin-right:7px;">Active</label></div>`:''}
+    </div>
+    <div class="modal-actions"><button class="btn btn-ghost" id="cancelBtn">Cancel</button><button class="btn btn-primary" id="saveBtn">${isEdit?'Save changes':'Create user'}</button></div>`;
+  openModal(html, (wrap)=>{
+    wrap.querySelector('#cancelBtn').addEventListener('click', closeModal);
+    wrap.querySelector('#saveBtn').addEventListener('click', async ()=>{
+      const dn = wrap.querySelector('#f_dn').value.trim();
+      const un = wrap.querySelector('#f_un').value.trim();
+      const pw = wrap.querySelector('#f_pw').value;
+      const role = wrap.querySelector('#f_role').value;
+      if (!dn || !un) return toast('Name and username are required', true);
+      const btn = wrap.querySelector('#saveBtn'); btn.disabled = true; btn.textContent = 'Saving…';
+      try{
+        if (isEdit){
+          const active = wrap.querySelector('#f_active').checked;
+          await callManageUser({ action:'update', targetId: existing.id, displayName: dn, role, active, password: pw || undefined });
+          toast('User updated');
+        } else {
+          const emailInput = wrap.querySelector('#f_email').value.trim();
+          const email = emailInput || (un.toLowerCase().replace(/[^a-z0-9]/g,'') + '@fourlytic.app');
+          if (!pw) return toast('Password is required', true);
+          await callManageUser({ action:'create', username: un, email, displayName: dn, role, password: pw });
+          toast('User created');
+        }
+        closeModal();
+        const m = document.getElementById('main'); if (m){ m.innerHTML = renderAdminPage(); bindAdminPage(); }
+      }catch(e){ toast(e.message, true); btn.disabled=false; btn.textContent = isEdit?'Save changes':'Create user'; }
+    });
+  });
+}
+</script>
+</body>
+</html>
