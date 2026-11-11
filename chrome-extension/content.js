@@ -54,14 +54,18 @@ function ensurePopover() {
 // Tasks, Contacts) to anchor ours directly beneath, so it reads as
 // part of that rail rather than a random floating button.
 function findRailAnchor() {
-  const candidates = ["Calendar", "Keep", "Tasks", "Contacts"];
-  for (const label of candidates) {
+  const labels = ["Calendar", "Keep", "Tasks", "Contacts"];
+  let lowest = null;
+  for (const label of labels) {
     const el = document.querySelector(
       `[aria-label="${label}" i], [data-tooltip="${label}" i]`
     );
-    if (el) return el;
+    if (!el) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) continue;
+    if (!lowest || rect.bottom > lowest.rect.bottom) lowest = { el, rect };
   }
-  return null;
+  return lowest ? lowest.el : null;
 }
 
 let lastAnchorRect = null;
