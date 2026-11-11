@@ -182,6 +182,14 @@ tr.row-click:hover{background:var(--surface-2);}
 .drawer-head h2{font-size:18px;}
 .drawer-head .sub{font-size:12.5px; color:var(--fg-muted); margin-top:3px;}
 .icon-btn{all:unset; cursor:pointer; width:28px; height:28px; border-radius:7px; display:flex; align-items:center; justify-content:center; color:var(--fg-muted);}
+.reminder-badge{position:absolute; top:-2px; right:-2px; min-width:15px; height:15px; padding:0 3px; border-radius:8px; background:var(--bad); color:#fff; font-size:10px; font-weight:700; line-height:15px; text-align:center;}
+.reminders-panel{position:absolute; top:calc(100% + 8px); right:0; width:300px; max-height:360px; overflow-y:auto; background:var(--surface); border:1px solid var(--border); border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.18); z-index:50; padding:6px;}
+.reminders-head{font-size:12px; font-weight:700; color:var(--fg-muted); text-transform:uppercase; letter-spacing:.04em; padding:8px 10px 6px;}
+.reminder-item{padding:8px 10px; border-radius:8px; cursor:pointer;}
+.reminder-item:hover{background:var(--surface-2);}
+.reminder-item .rt{font-size:13px; font-weight:600;}
+.reminder-item .rm{font-size:12px; color:var(--fg-muted); margin-top:2px;}
+.reminder-item .rm.overdue{color:var(--bad); font-weight:600;}
 .icon-btn:hover{background:var(--surface-2); color:var(--fg);}
 .drawer-body{padding:16px 20px 40px;}
 .tabs{display:flex; gap:4px; border-bottom:1px solid var(--border); margin-bottom:16px; overflow-x:auto;}
@@ -289,6 +297,7 @@ let state = {
   loaded: {users:false, companies:false, contacts:false, deals:false, activities:false, tasks:false},
   search: '',
   sidebarOpen: false,
+  remindersOpen: false,
 };
 
 /* ---------------- theme ---------------- */
@@ -419,7 +428,7 @@ async function logout(){
   try{ await sb.removeAllChannels(); }catch(e){}
   subscribed = false;
   state.authed = false; state.me = null;
-  state.route='pipeline'; state.detail=null; state.search='';
+  state.route='pipeline'; state.detail=null; state.search=''; state.remindersOpen = false;
   state.users=[]; state.companies=[]; state.contacts=[]; state.deals=[]; state.activities=[]; state.tasks=[];
   state.loaded = {users:false, companies:false, contacts:false, deals:false, activities:false, tasks:false};
   render();
@@ -623,6 +632,7 @@ const ICONS = {
   search: navIcon('<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'),
   plus: navIcon('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>'),
   tasks: navIcon('<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>'),
+  bell: navIcon('<path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>'),
 };
 function renderShell(){
   const navItems = [
@@ -656,6 +666,7 @@ function renderShell(){
   ${state.detail ? renderDetailDrawer() : ''}
   `;
 }
+let remindersOutsideClickBound = false;
 function bindShell(){
   document.querySelectorAll('.nav button[data-route]').forEach(b=> b.addEventListener('click', ()=> navigate(b.dataset.route)));
   const lo = document.getElementById('logoutBtn'); if (lo) lo.addEventListener('click', logout);
@@ -664,6 +675,19 @@ function bindShell(){
   if (menuBtn) menuBtn.addEventListener('click', ()=>{ state.sidebarOpen = !state.sidebarOpen; render(); });
   const backdrop = document.getElementById('sidebarBackdrop');
   if (backdrop) backdrop.addEventListener('click', ()=>{ state.sidebarOpen = false; render(); });
+  const bell = document.getElementById('remindersBell');
+  if (bell) bell.addEventListener('click', (e)=>{ e.stopPropagation(); state.remindersOpen = !state.remindersOpen; render(); });
+  const remPanel = document.getElementById('remindersPanel');
+  if (remPanel) remPanel.addEventListener('click', (e)=> e.stopPropagation());
+  document.querySelectorAll('[data-reminder-row]').forEach(el=> el.addEventListener('click', ()=>{
+    const [type, id] = el.dataset.reminderRow.split(':');
+    state.remindersOpen = false;
+    navigate(state.route, {type, id});
+  }));
+  if (!remindersOutsideClickBound){
+    document.addEventListener('click', ()=>{ if (state.remindersOpen){ state.remindersOpen = false; render(); } });
+    remindersOutsideClickBound = true;
+  }
   bindPage();
   if (state.detail) bindDetailDrawer();
 }
@@ -692,7 +716,42 @@ function topbar(title, sub, actionsHtml){
       <button class="menu-btn" id="menuBtn">${ICONS.menu}</button>
       <div><h1>${title}</h1>${sub?`<div class="sub">${sub}</div>`:''}</div>
     </div>
-    <div style="display:flex; gap:10px; align-items:center;">${actionsHtml||''}</div>
+    <div style="display:flex; gap:10px; align-items:center;">
+      ${renderRemindersBell()}
+      ${actionsHtml||''}
+    </div>
+  </div>`;
+}
+function myReminders(){
+  if (!state.me) return [];
+  const todayEnd = new Date(new Date().toDateString());
+  return state.tasks
+    .filter(t=>!t.done && t.due_date && t.assigned_to===state.me.displayName && new Date(t.due_date) <= todayEnd)
+    .sort((a,b)=> new Date(a.due_date) - new Date(b.due_date));
+}
+function renderRemindersBell(){
+  const items = myReminders();
+  const count = items.length;
+  return `
+  <div style="position:relative;">
+    <button class="icon-btn" id="remindersBell" title="Reminders" style="position:relative;">
+      ${ICONS.bell}
+      ${count>0?`<span class="reminder-badge">${count>9?'9+':count}</span>`:''}
+    </button>
+    ${state.remindersOpen ? renderRemindersPanel(items) : ''}
+  </div>`;
+}
+function renderRemindersPanel(items){
+  return `<div class="reminders-panel" id="remindersPanel">
+    <div class="reminders-head">Reminders</div>
+    ${items.length===0 ? `<div class="empty-state" style="padding:16px 0;">You're all caught up.</div>` :
+      items.map(t=>{
+        const overdue = isOverdue(t);
+        return `<div class="reminder-item" data-reminder-row="${t.parent_type}:${t.parent_id}">
+          <div class="rt">${esc(t.title)}</div>
+          <div class="rm ${overdue?'overdue':''}">${overdue?'Overdue':'Due today'} · ${esc(parentLabel(t.parent_type,t.parent_id))}</div>
+        </div>`;
+      }).join('')}
   </div>`;
 }
 
