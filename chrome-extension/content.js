@@ -111,9 +111,14 @@ function closePopover() {
   if (pop) pop.classList.remove("open");
 }
 
-function setNeedsAction(needs) {
+// status: "none" (no dot -- nothing to do), "pending" (orange -- needs
+// action: sign in, confirm, or edit a new contact), "synced" (green --
+// this email is already logged).
+function setIconStatus(status) {
   const icon = document.getElementById("fourlytic-rail-icon");
-  if (icon) icon.classList.toggle("has-action", !!needs);
+  if (!icon) return;
+  icon.classList.toggle("has-action", status === "pending");
+  icon.classList.toggle("has-synced", status === "synced");
 }
 
 function renderIfOpen() {
@@ -181,7 +186,7 @@ function renderPopover() {
         return;
       }
       lastState = { type: "synced", name: name || s.name, lastSyncedAt: new Date().toISOString() };
-      setNeedsAction(false);
+      setIconStatus("synced");
       renderPopover();
     });
     return;
@@ -216,7 +221,7 @@ function renderPopover() {
         return;
       }
       lastState = { type: "synced", name: contactDisplayName(res.contact), lastSyncedAt: new Date().toISOString() };
-      setNeedsAction(false);
+      setIconStatus("synced");
       renderPopover();
     });
   }
@@ -294,11 +299,11 @@ function formatRelativeTime(iso) {
 
 async function processOpenThread() {
   const participants = getParticipants();
-  if (participants.size === 0) { lastState = null; setNeedsAction(false); renderIfOpen(); return; }
+  if (participants.size === 0) { lastState = null; setIconStatus("none"); renderIfOpen(); return; }
 
   const key = location.hash;
   const lead = pickLeadEmail(participants);
-  if (!lead) { lastState = null; setNeedsAction(false); renderIfOpen(); return; }
+  if (!lead) { lastState = null; setIconStatus("none"); renderIfOpen(); return; }
   const [leadEmail, leadName] = lead;
 
   if (key === lastProcessedKey) return; // already handled this thread view
@@ -308,7 +313,7 @@ async function processOpenThread() {
   if (!auth || !auth.loggedIn) {
     myEmail = null;
     lastState = { type: "signed_out" };
-    setNeedsAction(true);
+    setIconStatus("pending");
     renderIfOpen();
     return;
   }
@@ -317,7 +322,7 @@ async function processOpenThread() {
   const check = await chrome.runtime.sendMessage({ type: "CHECK_EMAIL", senderEmail: leadEmail, messageId: key });
   if (!check.ok) {
     lastState = { type: "error", message: check.error || "unknown" };
-    setNeedsAction(true);
+    setIconStatus("pending");
     renderIfOpen();
     return;
   }
@@ -328,7 +333,7 @@ async function processOpenThread() {
   if (check.contact) {
     if (check.alreadySynced) {
       lastState = { type: "synced", name: contactDisplayName(check.contact), lastSyncedAt: check.lastSyncedAt };
-      setNeedsAction(false);
+      setIconStatus("synced");
     } else {
       lastState = {
         type: "matched_confirm",
@@ -338,7 +343,7 @@ async function processOpenThread() {
         email: check.contact.email,
         key, subject, snippet,
       };
-      setNeedsAction(true);
+      setIconStatus("pending");
     }
   } else {
     lastState = {
@@ -347,7 +352,7 @@ async function processOpenThread() {
       name: leadName || leadEmail,
       key, subject, snippet,
     };
-    setNeedsAction(true);
+    setIconStatus("pending");
   }
 
   renderIfOpen();

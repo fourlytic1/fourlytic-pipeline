@@ -20,6 +20,7 @@
 }
 #fourlytic-rail-icon img { width: 20px; height: 20px; display: block; }
 #fourlytic-rail-icon.has-action { border-color: #ea580c; }
+#fourlytic-rail-icon.has-synced { border-color: #2e7d32; }
 #fourlytic-rail-icon .fourlytic-dot {
   position: absolute;
   top: -2px;
@@ -27,11 +28,14 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #ea580c;
+  background: #ea580c; /* default: pending */
   display: none;
   box-shadow: 0 0 0 2px #fff;
 }
-#fourlytic-rail-icon.has-action .fourlytic-dot { display: block; }
+/* dot shows for either status -- orange while pending, green once synced */
+#fourlytic-rail-icon.has-action .fourlytic-dot,
+#fourlytic-rail-icon.has-synced .fourlytic-dot { display: block; }
+#fourlytic-rail-icon.has-synced .fourlytic-dot { background: #2e7d32; }
 
 #fourlytic-popover {
   position: fixed;
