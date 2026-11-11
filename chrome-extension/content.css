@@ -70,3 +70,13 @@
   white-space: nowrap;
 }
 #fourlytic-popover button:disabled { opacity: .6; cursor: default; }
+#fourlytic-popover input {
+  background: #262d35;
+  color: #fff;
+  border: 1px solid #3a434d;
+  border-radius: 6px;
+  padding: 7px 9px;
+  font-size: 13px;
+  font-family: inherit;
+}
+#fourlytic-popover input::placeholder { color: #7a858f; }
