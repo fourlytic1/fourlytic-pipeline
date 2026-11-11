@@ -8,30 +8,52 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600;700&display=swap">
 <style>
 :root{
-  --bg:#F5F6F8; --surface:#FFFFFF; --surface-2:#FAFBFC;
-  --border:#E1E4E9; --fg:#1B2430; --fg-muted:#5B6472; --fg-faint:#8A93A1;
-  --accent:#0E7C86; --accent-fg:#FFFFFF; --accent-soft:#E3F2F2;
-  --good:#1F9D55; --good-soft:#E3F6EA;
-  --bad:#D64545; --bad-soft:#FBE7E7;
-  --warn:#C9862A; --warn-soft:#FBF0DF;
-  --info:#3B6FD9; --info-soft:#E6ECFB;
-  --shadow: 0 1px 2px rgba(20,30,40,.06), 0 4px 14px rgba(20,30,40,.06);
+  --bg:#F6F7FA; --surface:#FFFFFF; --surface-2:#F0F2F6;
+  --border:#E2E6ED; --fg:#1C2430; --fg-muted:#5C6776; --fg-faint:#8D97A6;
+  --accent:#1F7A8C; --accent-fg:#FFFFFF; --accent-soft:#E6F1F3;
+  --good:#2E9E6C; --good-soft:#E4F5EC;
+  --bad:#D1584F; --bad-soft:#FBEAE8;
+  --warn:#C38A3D; --warn-soft:#FAF0E0;
+  --info:#4870B0; --info-soft:#EAF0FA;
+  --shadow: 0 1px 2px rgba(25,35,50,.05), 0 6px 18px rgba(25,35,50,.06);
   --font-display:'Space Grotesk', 'Segoe UI', sans-serif;
   --font-body:'Inter', 'Segoe UI', sans-serif;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#13171D; --surface:#1B2027; --surface-2:#20262E;
-    --border:#2C333C; --fg:#E7EAEE; --fg-muted:#9BA4B1; --fg-faint:#6B7380;
-    --accent:#2FB3B0; --accent-fg:#06211F; --accent-soft:#193331;
-    --good:#3FC274; --good-soft:#163524;
-    --bad:#F07373; --bad-soft:#3A1E1E;
-    --warn:#E3A748; --warn-soft:#3A2E16;
-    --info:#7FA3F2; --info-soft:#1B2740;
-    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.35);
+    --bg:#10151C; --surface:#171E27; --surface-2:#1C2430;
+    --border:#2B3542; --fg:#E7EBF1; --fg-muted:#97A2B2; --fg-faint:#636E7D;
+    --accent:#4FBFC4; --accent-fg:#072224; --accent-soft:#17343A;
+    --good:#4CC28B; --good-soft:#153528;
+    --bad:#E88179; --bad-soft:#3A2220;
+    --warn:#E0AC63; --warn-soft:#3A2C18;
+    --info:#86AEE8; --info-soft:#1C2B42;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 22px rgba(0,0,0,.4);
     color-scheme: dark;
   }
+}
+:root[data-theme="dark"]{
+  --bg:#10151C; --surface:#171E27; --surface-2:#1C2430;
+  --border:#2B3542; --fg:#E7EBF1; --fg-muted:#97A2B2; --fg-faint:#636E7D;
+  --accent:#4FBFC4; --accent-fg:#072224; --accent-soft:#17343A;
+  --good:#4CC28B; --good-soft:#153528;
+  --bad:#E88179; --bad-soft:#3A2220;
+  --warn:#E0AC63; --warn-soft:#3A2C18;
+  --info:#86AEE8; --info-soft:#1C2B42;
+  --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 22px rgba(0,0,0,.4);
+  color-scheme: dark;
+}
+:root[data-theme="light"]{
+  --bg:#F6F7FA; --surface:#FFFFFF; --surface-2:#F0F2F6;
+  --border:#E2E6ED; --fg:#1C2430; --fg-muted:#5C6776; --fg-faint:#8D97A6;
+  --accent:#1F7A8C; --accent-fg:#FFFFFF; --accent-soft:#E6F1F3;
+  --good:#2E9E6C; --good-soft:#E4F5EC;
+  --bad:#D1584F; --bad-soft:#FBEAE8;
+  --warn:#C38A3D; --warn-soft:#FAF0E0;
+  --info:#4870B0; --info-soft:#EAF0FA;
+  --shadow: 0 1px 2px rgba(25,35,50,.05), 0 6px 18px rgba(25,35,50,.06);
+  color-scheme: light;
 }
 *{box-sizing:border-box;}
 html,body{height:100%;}
@@ -65,8 +87,12 @@ button, input, select, textarea{font-family:inherit; font-size:inherit; color:in
 .me .who{min-width:0;}
 .me .who .n{font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .me .who .r{font-size:11px; color:var(--fg-faint); text-transform:uppercase; letter-spacing:.04em;}
-.logout-btn{all:unset; cursor:pointer; margin-top:10px; font-size:12px; color:var(--fg-faint); display:block;}
+.logout-btn{all:unset; cursor:pointer; font-size:12px; color:var(--fg-faint); display:block;}
 .logout-btn:hover{color:var(--bad);}
+.footer-row{display:flex; align-items:center; justify-content:space-between; margin-top:10px;}
+.theme-toggle{all:unset; cursor:pointer; width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:var(--fg-muted); border:1px solid var(--border); background:var(--surface); flex:none;}
+.theme-toggle:hover{background:var(--surface-2); color:var(--fg);}
+.login-theme-toggle{position:absolute; top:18px; right:18px;}
 
 .main{flex:1; min-width:0; overflow:auto; padding:22px 26px 60px;}
 .topbar{display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:18px; flex-wrap:wrap;}
@@ -86,7 +112,7 @@ button, input, select, textarea{font-family:inherit; font-size:inherit; color:in
 .btn-sm{padding:5px 10px; font-size:12px;}
 
 .login-wrap{min-height:100%; display:flex; align-items:center; justify-content:center; padding:24px;}
-.login-card{width:100%; max-width:360px; background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:32px 28px; box-shadow:var(--shadow);}
+.login-card{position:relative; width:100%; max-width:360px; background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:32px 28px; box-shadow:var(--shadow);}
 .login-card .mark{width:40px; height:40px; border-radius:11px; background:var(--accent); color:var(--accent-fg); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:700; font-size:18px; margin-bottom:16px;}
 .login-card h1{font-size:19px; margin-bottom:4px;}
 .login-card p.lead{color:var(--fg-muted); font-size:13px; margin-bottom:22px;}
@@ -248,6 +274,27 @@ let state = {
   search: '',
   sidebarOpen: false,
 };
+
+/* ---------------- theme ---------------- */
+function getStoredTheme(){ try{ return localStorage.getItem('fourlytic-theme'); }catch(e){ return null; } }
+function isDarkActive(){
+  const s = getStoredTheme();
+  if (s==='dark') return true;
+  if (s==='light') return false;
+  try{ return window.matchMedia('(prefers-color-scheme: dark)').matches; }catch(e){ return false; }
+}
+function applyStoredTheme(){
+  const s = getStoredTheme();
+  if (s==='dark' || s==='light') document.documentElement.setAttribute('data-theme', s);
+  else document.documentElement.removeAttribute('data-theme');
+}
+function toggleTheme(){
+  const next = isDarkActive() ? 'light' : 'dark';
+  try{ localStorage.setItem('fourlytic-theme', next); }catch(e){}
+  applyStoredTheme();
+  render();
+}
+applyStoredTheme();
 
 /* ---------------- utils ---------------- */
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -438,6 +485,7 @@ function renderLogin(){
   return `
   <div class="login-wrap">
     <div class="login-card">
+      <button class="theme-toggle login-theme-toggle" id="themeToggleLogin" title="Toggle theme">${isDarkActive()?ICONS.sun:ICONS.moon}</button>
       <div class="mark">FL</div>
       <h1>Fourlytic Pipeline</h1>
       <p class="lead">Internal CRM — sign in with your team account.</p>
@@ -452,6 +500,8 @@ function renderLogin(){
   </div>`;
 }
 function bindLogin(){
+  const tt = document.getElementById('themeToggleLogin');
+  if (tt) tt.addEventListener('click', toggleTheme);
   const form = document.getElementById('loginForm');
   form.addEventListener('submit', async (e)=>{
     e.preventDefault();
@@ -481,6 +531,8 @@ const ICONS = {
   close: navIcon('<line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/>'),
   search: navIcon('<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'),
   plus: navIcon('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>'),
+  sun: navIcon('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>'),
+  moon: navIcon('<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>'),
 };
 function renderShell(){
   const navItems = [
@@ -501,7 +553,10 @@ function renderShell(){
           <div class="avatar">${initials(state.me.displayName)}</div>
           <div class="who"><div class="n">${esc(state.me.displayName)}</div><div class="r">${esc(state.me.role)}</div></div>
         </div>
-        <button class="logout-btn" id="logoutBtn">Sign out</button>
+        <div class="footer-row">
+          <button class="logout-btn" id="logoutBtn">Sign out</button>
+          <button class="theme-toggle" id="themeToggleApp" title="Toggle theme">${isDarkActive()?ICONS.sun:ICONS.moon}</button>
+        </div>
       </div>
     </nav>
     <div class="main" id="main">${renderPage()}</div>
@@ -512,6 +567,7 @@ function renderShell(){
 function bindShell(){
   document.querySelectorAll('.nav button[data-route]').forEach(b=> b.addEventListener('click', ()=> navigate(b.dataset.route)));
   const lo = document.getElementById('logoutBtn'); if (lo) lo.addEventListener('click', logout);
+  const tt2 = document.getElementById('themeToggleApp'); if (tt2) tt2.addEventListener('click', toggleTheme);
   const menuBtn = document.getElementById('menuBtn');
   if (menuBtn) menuBtn.addEventListener('click', ()=>{ state.sidebarOpen = !state.sidebarOpen; render(); });
   bindPage();
