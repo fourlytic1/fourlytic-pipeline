@@ -1,0 +1,31 @@
+#fourlytic-sync-banner {
+  position: fixed;
+  top: 64px;
+  right: 24px;
+  z-index: 9999;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  max-width: 360px;
+  background: #1a1f24;
+  color: #fff;
+  font-family: -apple-system, "Google Sans", Roboto, Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 10px 14px;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+}
+#fourlytic-sync-banner b { font-weight: 700; }
+#fourlytic-sync-banner button {
+  background: #ea580c;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#fourlytic-sync-banner button:disabled { opacity: .6; cursor: default; }

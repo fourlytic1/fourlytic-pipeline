@@ -234,6 +234,42 @@ create policy "tasks_delete_admin_only" on public.tasks for delete using (public
 create index if not exists tasks_parent_idx on public.tasks(parent_type, parent_id);
 
 -- ---------------------------------------------------------------
--- REALTIME — so the app gets live updates across viewers
+-- SYNCED EMAILS — dedupe log for the Gmail Chrome extension, so the
+-- same email thread isn't logged as an activity more than once.
 -- ---------------------------------------------------------------
-alter publication supabase_realtime add table public.profiles, public.companies, public.contacts, public.deals, public.activities, public.tasks;
+create table if not exists public.synced_emails (
+  id uuid primary key default gen_random_uuid(),
+  gmail_message_id text not null unique,
+  contact_id uuid not null references public.contacts(id) on delete cascade,
+  synced_by text,
+  created_at timestamptz not null default now()
+);
+alter table public.synced_emails enable row level security;
+
+drop policy if exists "synced_emails_select_active_members" on public.synced_emails;
+drop policy if exists "synced_emails_insert_active_members" on public.synced_emails;
+drop policy if exists "synced_emails_delete_admin_only" on public.synced_emails;
+create policy "synced_emails_select_active_members" on public.synced_emails for select using (public.is_active_member());
+create policy "synced_emails_insert_active_members" on public.synced_emails for insert with check (public.is_active_member());
+create policy "synced_emails_delete_admin_only" on public.synced_emails for delete using (public.is_admin());
+
+create index if not exists synced_emails_contact_idx on public.synced_emails(contact_id);
+
+-- ---------------------------------------------------------------
+-- REALTIME — so the app gets live updates across viewers
+-- (idempotent: safe to re-run this whole file against a database
+-- that already has some or all of these tables in the publication)
+-- ---------------------------------------------------------------
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['profiles','companies','contacts','deals','activities','tasks','synced_emails']
+  loop
+    begin
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    exception when duplicate_object then
+      null; -- already a member, fine
+    end;
+  end loop;
+end $$;
