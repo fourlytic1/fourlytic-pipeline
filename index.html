@@ -1031,6 +1031,7 @@ function openUserModal(existing){
       const pw = wrap.querySelector('#f_pw').value;
       const role = wrap.querySelector('#f_role').value;
       if (!dn || !un) return toast('Name and username are required', true);
+      if (!isEdit && !pw) return toast('Password is required', true);
       const btn = wrap.querySelector('#saveBtn'); btn.disabled = true; btn.textContent = 'Saving…';
       try{
         if (isEdit){
@@ -1040,7 +1041,6 @@ function openUserModal(existing){
         } else {
           const emailInput = wrap.querySelector('#f_email').value.trim();
           const email = emailInput || (un.toLowerCase().replace(/[^a-z0-9]/g,'') + '@fourlytic.app');
-          if (!pw) return toast('Password is required', true);
           await callManageUser({ action:'create', username: un, email, displayName: dn, role, password: pw });
           toast('User created');
         }
