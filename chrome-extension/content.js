@@ -144,11 +144,13 @@ function renderPopover() {
     return;
   }
 
-  // Matched contact, not yet logged -- confirm before writing anything.
+  // Matched contact, not yet logged -- show the contact it will log to
+  // and confirm before writing anything.
   if (s.type === "matched_confirm") {
     pop.innerHTML = `
       <div class="fourlytic-title">Fourlytic Gmail Sync</div>
-      <span>Sync this email to <b>${escapeHtml(s.name)}</b> in Fourlytic CRM?</span>
+      <span>Sync this email to this contact in Fourlytic CRM?</span>
+      <span><b>${escapeHtml(s.name)}</b><br>${escapeHtml(s.email)}</span>
       <button id="fourlytic-confirm-btn">Confirm &amp; Sync</button>
     `;
     document.getElementById("fourlytic-confirm-btn").addEventListener("click", async (e) => {
@@ -320,6 +322,7 @@ async function processOpenThread() {
         type: "matched_confirm",
         contactId: check.contact.id,
         name: contactDisplayName(check.contact),
+        email: check.contact.email,
         key, subject, snippet,
       };
       setNeedsAction(true);
