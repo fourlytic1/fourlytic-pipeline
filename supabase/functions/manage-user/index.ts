@@ -120,6 +120,42 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    if (action === "delete") {
+      const { targetId } = body;
+      if (!targetId) return json({ error: "Missing targetId." }, 400);
+
+      if (targetId === user.id) {
+        return json({ error: "You can't delete your own account." }, 400);
+      }
+
+      const { data: target, error: targetErr } = await admin
+        .from("profiles")
+        .select("role")
+        .eq("id", targetId)
+        .maybeSingle();
+      if (targetErr || !target) return json({ error: "User not found." }, 404);
+
+      // Guard: never allow deleting the last remaining admin — that would
+      // lock everyone out of the Admin Panel with no recovery path.
+      if (target.role === "admin") {
+        const { count, error: countErr } = await admin
+          .from("profiles")
+          .select("id", { count: "exact", head: true })
+          .eq("role", "admin");
+        if (countErr) return json({ error: countErr.message }, 400);
+        if ((count ?? 0) <= 1) {
+          return json({ error: "You can't delete the only remaining admin." }, 400);
+        }
+      }
+
+      // Deleting the auth user cascades to its profiles row (FK: profiles.id
+      // references auth.users(id) on delete cascade), so no separate
+      // profiles delete is needed.
+      const { error: delErr } = await admin.auth.admin.deleteUser(targetId);
+      if (delErr) return json({ error: delErr.message }, 400);
+      return json({ ok: true });
+    }
+
     return json({ error: "Unknown action." }, 400);
   } catch (e) {
     return json({ error: String(e?.message || e) }, 500);

@@ -952,6 +952,7 @@ function renderAdminPage(){
           </div>
           <span class="badge badge-${u.role==='admin'?'admin':'sales'}">${esc(u.role)}</span>
           <button class="btn btn-ghost btn-sm" data-edit-user="${u.id}">Edit</button>
+          ${u.id!==state.me.id ? `<button class="btn btn-ghost btn-sm" style="color:var(--bad);" data-delete-user="${u.id}">Delete</button>` : ''}
         </div>`).join('')}
     </div>
   `;
@@ -960,6 +961,17 @@ function bindAdminPage(){
   const nb = document.getElementById('newUserBtn');
   if (nb) nb.addEventListener('click', ()=> openUserModal());
   document.querySelectorAll('[data-edit-user]').forEach(b=> b.addEventListener('click', ()=> openUserModal(userById(b.dataset.editUser))));
+  document.querySelectorAll('[data-delete-user]').forEach(b=> b.addEventListener('click', async ()=>{
+    const u = userById(b.dataset.deleteUser);
+    if (!u) return;
+    if (!window.confirm(`Delete ${u.display_name} (@${u.username})? This permanently removes their account and sign-in. This can't be undone.`)) return;
+    try{
+      await callManageUser({ action:'delete', targetId: u.id });
+      state.users = state.users.filter(x=>x.id!==u.id);
+      toast('User deleted');
+      rerenderMain(renderAdminPage, bindAdminPage);
+    }catch(e){ toast(e.message, true); }
+  }));
 }
 
 /* ---------------- DETAIL DRAWER ---------------- */
