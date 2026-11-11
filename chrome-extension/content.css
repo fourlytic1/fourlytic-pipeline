@@ -80,3 +80,16 @@
   font-family: inherit;
 }
 #fourlytic-popover input::placeholder { color: #7a858f; }
+
+/* Compose-window recipient badges: a small dot next to each chip. */
+.fourlytic-compose-badge {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin: 0 4px;
+  vertical-align: middle;
+}
+.fourlytic-badge-pending { background: #c7cdd3; }
+.fourlytic-badge-known { background: #2e7d32; }  /* already a Fourlytic contact */
+.fourlytic-badge-new { background: #ea580c; }    /* not in the CRM yet */

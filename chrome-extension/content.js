@@ -346,6 +346,81 @@ async function processOpenThread() {
   renderIfOpen();
 }
 
+/* ---------------- compose-window recipient badges ----------------
+   Shows a small dot next to each recipient chip while composing/
+   replying: green = already a Fourlytic contact, orange = not yet.
+   Purely informational -- no sync action happens from here.
+
+   Harder to target reliably than the read-thread selectors above:
+   a compose box (popup OR inline reply) is identified by its editable
+   message body (`[g_editable="true"]`, aria-label "Message Body"),
+   then we climb to the nearest ancestor that also contains a Send
+   button and treat that as the whole compose box, scanning it for
+   `[email]` recipient chips. This is a newer, less proven assumption
+   than the thread-reading selectors -- if badges don't show up (or
+   show up in the wrong place) after a real test, this is the first
+   place to check. */
+
+const composeContactCache = new Map(); // emailLower -> true/false/null (null = lookup failed)
+
+function findComposeContainers() {
+  const bodies = document.querySelectorAll(
+    '[g_editable="true"][aria-label], [contenteditable="true"][aria-label="Message Body" i]'
+  );
+  const containers = new Set();
+  bodies.forEach((body) => {
+    let el = body;
+    for (let i = 0; i < 8 && el; i++) {
+      if (el.querySelector && el.querySelector('[aria-label^="Send" i], [data-tooltip^="Send" i]')) {
+        containers.add(el);
+        return;
+      }
+      el = el.parentElement;
+    }
+  });
+  return Array.from(containers);
+}
+
+async function addComposeBadge(chip, email) {
+  const badge = document.createElement("span");
+  badge.className = "fourlytic-compose-badge fourlytic-badge-pending";
+  badge.title = "Checking Fourlytic CRM…";
+  chip.insertAdjacentElement("afterend", badge);
+
+  let known = composeContactCache.get(email);
+  if (known === undefined) {
+    const res = await chrome.runtime.sendMessage({ type: "CHECK_EMAIL", senderEmail: email, messageId: "__compose_check__" });
+    known = res && res.ok ? !!res.contact : null;
+    composeContactCache.set(email, known);
+  }
+
+  if (known === true) {
+    badge.className = "fourlytic-compose-badge fourlytic-badge-known";
+    badge.title = "Already in Fourlytic CRM";
+  } else if (known === false) {
+    badge.className = "fourlytic-compose-badge fourlytic-badge-new";
+    badge.title = "Not in Fourlytic CRM yet";
+  } else {
+    badge.remove(); // lookup failed -- don't show a possibly-wrong signal
+  }
+}
+
+async function scanComposeRecipients() {
+  const auth = await chrome.runtime.sendMessage({ type: "GET_AUTH_STATE" });
+  if (!auth || !auth.loggedIn) return;
+
+  for (const box of findComposeContainers()) {
+    const chips = box.querySelectorAll("[email]");
+    for (const chip of chips) {
+      if (chip.dataset.fourlyticBadged) continue;
+      const email = (chip.getAttribute("email") || "").toLowerCase();
+      if (!email) continue;
+      chip.dataset.fourlyticBadged = "1";
+      addComposeBadge(chip, email);
+    }
+  }
+}
+
 /* ---------------- bootstrap ---------------- */
 
 ensureIcon();
@@ -370,6 +445,7 @@ function scheduleProcess() {
   debounceTimer = setTimeout(() => {
     positionIcon();
     processOpenThread();
+    scanComposeRecipients();
   }, 600);
 }
 
