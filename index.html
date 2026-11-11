@@ -163,9 +163,11 @@ tr.row-click:hover{background:var(--surface-2);}
 .col-head .t{font-weight:700; font-size:12.5px; display:flex; align-items:center; gap:7px;}
 .col-head .dot{width:8px; height:8px; border-radius:50%; flex:none;}
 .col-head .count{font-size:11px; color:var(--fg-faint); background:var(--surface); border:1px solid var(--border); border-radius:100px; padding:1px 7px;}
-.col-body{overflow-y:auto; padding:10px; display:flex; flex-direction:column; gap:9px;}
-.deal-card{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:11px 12px; cursor:pointer; transition:border-color .12s;}
+.col-body{overflow-y:auto; padding:10px; display:flex; flex-direction:column; gap:9px; transition:background-color .12s, outline-color .12s; outline:2px dashed transparent; outline-offset:-2px;}
+.col-body.drag-over{background:var(--accent-soft); outline-color:var(--accent);}
+.deal-card{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:11px 12px; cursor:grab; transition:border-color .12s, opacity .12s;}
 .deal-card:hover{border-color:var(--accent);}
+.deal-card.dragging{opacity:.45; cursor:grabbing;}
 .deal-card .dn{font-weight:700; font-size:13px; margin-bottom:3px;}
 .deal-card .dc{font-size:12px; color:var(--fg-muted); margin-bottom:7px;}
 .deal-card .meta{display:flex; align-items:center; justify-content:space-between; gap:6px;}
@@ -677,7 +679,7 @@ function renderColumn(st, count){
   return `
   <div class="col">
     <div class="col-head"><div class="t"><span class="dot" style="background:${st.color}"></span>${st.label}</div><span class="count">${count}</span></div>
-    <div class="col-body">${deals.length===0 ? `<div class="col-empty">No deals</div>` : deals.map(d=>renderDealCard(d)).join('')}</div>
+    <div class="col-body" data-stage="${st.id}">${deals.length===0 ? `<div class="col-empty">No deals</div>` : deals.map(d=>renderDealCard(d)).join('')}</div>
   </div>`;
 }
 function renderDealCard(d){
@@ -685,7 +687,7 @@ function renderDealCard(d){
   const co = companyById(d.company_id);
   const owner = c ? c.lead_owner : null;
   return `
-  <div class="deal-card" data-deal="${d.id}">
+  <div class="deal-card" data-deal="${d.id}" draggable="true">
     <div class="dn">${esc(d.deal_name||'Untitled deal')}</div>
     <div class="dc">${esc(co?co.name:'—')}${c?' · '+esc(contactName(c)):''}</div>
     <div class="meta">
@@ -697,7 +699,33 @@ function renderDealCard(d){
 function bindPipelinePage(){
   const s = document.getElementById('pipelineSearch');
   if (s) s.addEventListener('input', ()=>{ state.search = s.value; rerenderMain(renderPipelinePage, bindPipelinePage); });
-  document.querySelectorAll('.deal-card').forEach(el=> el.addEventListener('click', ()=> navigate(state.route, {type:'deal', id:el.dataset.deal})));
+  document.querySelectorAll('.deal-card').forEach(el=>{
+    el.addEventListener('click', ()=> navigate(state.route, {type:'deal', id:el.dataset.deal}));
+    el.addEventListener('dragstart', (e)=>{
+      e.dataTransfer.setData('text/plain', el.dataset.deal);
+      e.dataTransfer.effectAllowed = 'move';
+      el.classList.add('dragging');
+    });
+    el.addEventListener('dragend', ()=> el.classList.remove('dragging'));
+  });
+  document.querySelectorAll('.col-body').forEach(col=>{
+    col.addEventListener('dragover', (e)=>{ e.preventDefault(); e.dataTransfer.dropEffect = 'move'; col.classList.add('drag-over'); });
+    col.addEventListener('dragleave', ()=> col.classList.remove('drag-over'));
+    col.addEventListener('drop', async (e)=>{
+      e.preventDefault();
+      col.classList.remove('drag-over');
+      const dealId = e.dataTransfer.getData('text/plain');
+      const deal = dealById(dealId);
+      const newStage = col.dataset.stage;
+      if (!deal || !newStage || deal.stage === newStage) return;
+      let reason;
+      if (newStage === 'lost' && !deal.position_drop_reason){
+        reason = window.prompt('Reason this deal is being marked Lost (optional):', '') || '';
+      }
+      await setDealStage(deal, newStage, reason);
+      toast('Stage updated');
+    });
+  });
   const nb = document.getElementById('newDealBtn');
   if (nb) nb.addEventListener('click', ()=> openDealModal());
 }
