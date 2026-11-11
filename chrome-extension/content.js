@@ -3,34 +3,162 @@
 // it's with, and checks/syncs that contact against the Fourlytic CRM
 // via the background service worker (which holds the Supabase session).
 //
+// UI: a small icon docks itself in Gmail's own right-side rail (next to
+// Calendar/Keep/Tasks/Contacts) instead of an always-visible banner.
+// Clicking it opens a popover with the current thread's sync status.
+// A small orange dot on the icon means "needs action" (not signed in,
+// or this contact isn't in the CRM yet) even before the popover opens.
+//
 // Note: Gmail's DOM has no public API and its class names are
 // unstable/obfuscated over time. The selectors below (`.gD[email]` for
-// sender chips, `h2.hP` for subject, `.a3s` for message body) are the
-// long-standing ones most Gmail extensions rely on, but Google can
-// change them in a redesign — if syncing silently stops working, this
-// is the first place to check.
+// sender chips, `h2.hP` for subject, `.a3s` for message body, and the
+// `aria-label`/`data-tooltip` lookups used to find the native side
+// rail) are long-standing conventions most Gmail extensions rely on,
+// but Google can change them in a redesign — if the icon stops docking
+// correctly, or syncing silently stops working, this is the first
+// place to check.
 
 let myEmail = null;
 let lastProcessedKey = null;
-let banner = null;
+let lastState = null; // cached result of the last processOpenThread(), shown when popover opens
 
-function ensureBanner() {
-  if (banner && document.body.contains(banner)) return banner;
-  banner = document.createElement("div");
-  banner.id = "fourlytic-sync-banner";
-  document.body.appendChild(banner);
-  return banner;
+/* ---------------- docked rail icon + popover ---------------- */
+
+function ensureIcon() {
+  let icon = document.getElementById("fourlytic-rail-icon");
+  if (icon) return icon;
+  icon = document.createElement("div");
+  icon.id = "fourlytic-rail-icon";
+  icon.title = "Fourlytic Gmail Sync";
+  const img = document.createElement("img");
+  img.src = chrome.runtime.getURL("icons/icon48.png");
+  const dot = document.createElement("div");
+  dot.className = "fourlytic-dot";
+  icon.appendChild(img);
+  icon.appendChild(dot);
+  document.body.appendChild(icon);
+  icon.addEventListener("click", () => togglePopover());
+  return icon;
 }
 
-function showBanner(html) {
-  const el = ensureBanner();
-  el.innerHTML = html;
-  el.style.display = "flex";
+function ensurePopover() {
+  let pop = document.getElementById("fourlytic-popover");
+  if (pop) return pop;
+  pop = document.createElement("div");
+  pop.id = "fourlytic-popover";
+  document.body.appendChild(pop);
+  return pop;
 }
 
-function hideBanner() {
-  if (banner) banner.style.display = "none";
+// Finds one of Gmail's own native side-rail icons (Calendar, Keep,
+// Tasks, Contacts) to anchor ours directly beneath, so it reads as
+// part of that rail rather than a random floating button.
+function findRailAnchor() {
+  const candidates = ["Calendar", "Keep", "Tasks", "Contacts"];
+  for (const label of candidates) {
+    const el = document.querySelector(
+      `[aria-label="${label}" i], [data-tooltip="${label}" i]`
+    );
+    if (el) return el;
+  }
+  return null;
 }
+
+let lastAnchorRect = null;
+function positionIcon() {
+  const icon = document.getElementById("fourlytic-rail-icon");
+  if (!icon) return;
+  const anchor = findRailAnchor();
+  if (!anchor) { icon.style.display = "none"; return; }
+  const rect = anchor.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) { icon.style.display = "none"; return; }
+  // Walk up to find the rail column itself so we sit directly below
+  // its lowest icon rather than below just one arbitrary element.
+  let railRight = window.innerWidth - rect.right;
+  icon.style.right = `${Math.max(railRight, 8)}px`;
+  icon.style.top = `${rect.bottom + 12}px`;
+  icon.style.display = "flex";
+  lastAnchorRect = rect;
+}
+
+function togglePopover() {
+  const pop = ensurePopover();
+  if (pop.classList.contains("open")) {
+    pop.classList.remove("open");
+    return;
+  }
+  const icon = document.getElementById("fourlytic-rail-icon");
+  const iconRect = icon.getBoundingClientRect();
+  pop.style.right = `${window.innerWidth - iconRect.left + 10}px`;
+  pop.style.top = `${iconRect.top}px`;
+  renderPopover();
+  pop.classList.add("open");
+}
+
+function closePopover() {
+  const pop = document.getElementById("fourlytic-popover");
+  if (pop) pop.classList.remove("open");
+}
+
+function setNeedsAction(needs) {
+  const icon = document.getElementById("fourlytic-rail-icon");
+  if (icon) icon.classList.toggle("has-action", !!needs);
+}
+
+function renderPopover() {
+  const pop = ensurePopover();
+  const s = lastState;
+
+  if (!s) {
+    pop.innerHTML = `<div class="fourlytic-title">Fourlytic Gmail Sync</div><span>Open an email to sync it.</span>`;
+    return;
+  }
+
+  if (s.type === "signed_out") {
+    pop.innerHTML = `<div class="fourlytic-title">Fourlytic Gmail Sync</div><span>Sign in via the extension's toolbar icon to sync this conversation.</span>`;
+    return;
+  }
+
+  if (s.type === "error") {
+    pop.innerHTML = `<div class="fourlytic-title">Fourlytic Gmail Sync</div><span>Sync error: ${escapeHtml(s.message)}</span>`;
+    return;
+  }
+
+  if (s.type === "synced") {
+    pop.innerHTML = `<div class="fourlytic-title">Fourlytic Gmail Sync</div><span>&#10003; Synced to <b>${escapeHtml(s.name)}</b> in Fourlytic CRM.</span>`;
+    return;
+  }
+
+  if (s.type === "unmatched") {
+    pop.innerHTML = `
+      <div class="fourlytic-title">Fourlytic Gmail Sync</div>
+      <span>Not in Fourlytic CRM yet.</span>
+      <button id="fourlytic-add-btn">Add &amp; Sync ${escapeHtml(s.name)}</button>
+    `;
+    const btn = document.getElementById("fourlytic-add-btn");
+    btn.addEventListener("click", async () => {
+      btn.disabled = true; btn.textContent = "Syncing…";
+      const { firstName, lastName } = splitName(s.name, s.email);
+      const res = await chrome.runtime.sendMessage({
+        type: "CREATE_AND_SYNC",
+        email: s.email,
+        firstName, lastName,
+        messageId: s.key,
+        subject: s.subject,
+        snippet: s.snippet,
+      });
+      if (!res.ok) {
+        pop.innerHTML = `<div class="fourlytic-title">Fourlytic Gmail Sync</div><span>Could not sync: ${escapeHtml(res.error || "unknown error")}</span>`;
+        return;
+      }
+      lastState = { type: "synced", name: contactDisplayName(res.contact) };
+      setNeedsAction(false);
+      renderPopover();
+    });
+  }
+}
+
+/* ---------------- Gmail DOM reading ---------------- */
 
 function getParticipants() {
   const chips = Array.from(document.querySelectorAll("span.gD[email]"));
@@ -72,13 +200,23 @@ function splitName(fullName, email) {
   return { firstName: parts[0], lastName: parts.slice(1).join(" ") || null };
 }
 
+function contactDisplayName(contact) {
+  return [contact.first_name, contact.last_name].filter(Boolean).join(" ") || contact.email;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+/* ---------------- thread processing ---------------- */
+
 async function processOpenThread() {
   const participants = getParticipants();
-  if (participants.size === 0) { hideBanner(); return; }
+  if (participants.size === 0) { lastState = null; setNeedsAction(false); return; }
 
   const key = location.hash;
   const lead = pickLeadEmail(participants);
-  if (!lead) { hideBanner(); return; }
+  if (!lead) { lastState = null; setNeedsAction(false); return; }
   const [leadEmail, leadName] = lead;
 
   if (key === lastProcessedKey) return; // already handled this thread view
@@ -86,14 +224,21 @@ async function processOpenThread() {
 
   const auth = await chrome.runtime.sendMessage({ type: "GET_AUTH_STATE" });
   if (!auth || !auth.loggedIn) {
-    showBanner(`<span>Sign in to <b>Fourlytic Gmail Sync</b> (toolbar icon) to sync this conversation.</span>`);
     myEmail = null;
+    lastState = { type: "signed_out" };
+    setNeedsAction(true);
+    if (document.getElementById("fourlytic-popover")?.classList.contains("open")) renderPopover();
     return;
   }
   myEmail = auth.email || myEmail;
 
   const check = await chrome.runtime.sendMessage({ type: "CHECK_EMAIL", senderEmail: leadEmail, messageId: key });
-  if (!check.ok) { showBanner(`<span>Fourlytic sync error: ${escapeHtml(check.error || "unknown")}</span>`); return; }
+  if (!check.ok) {
+    lastState = { type: "error", message: check.error || "unknown" };
+    setNeedsAction(true);
+    if (document.getElementById("fourlytic-popover")?.classList.contains("open")) renderPopover();
+    return;
+  }
 
   if (check.contact) {
     if (!check.alreadySynced) {
@@ -105,53 +250,51 @@ async function processOpenThread() {
         snippet: getSnippet(),
       });
     }
-    showBanner(`<span>&#10003; Synced to <b>${escapeHtml(contactDisplayName(check.contact))}</b> in Fourlytic CRM.</span>`);
-    return;
+    lastState = { type: "synced", name: contactDisplayName(check.contact) };
+    setNeedsAction(false);
+  } else {
+    lastState = {
+      type: "unmatched",
+      email: leadEmail,
+      name: leadName || leadEmail,
+      key,
+      subject: getSubject(),
+      snippet: getSnippet(),
+    };
+    setNeedsAction(true);
   }
 
-  // Not in the CRM yet — offer to add + sync.
-  showBanner(`
-    <span>Not in Fourlytic CRM —</span>
-    <button id="fourlytic-add-btn">Add &amp; Sync ${escapeHtml(leadName || leadEmail)}</button>
-  `);
-  const btn = document.getElementById("fourlytic-add-btn");
-  if (btn) {
-    btn.addEventListener("click", async () => {
-      btn.disabled = true; btn.textContent = "Syncing…";
-      const { firstName, lastName } = splitName(leadName, leadEmail);
-      const res = await chrome.runtime.sendMessage({
-        type: "CREATE_AND_SYNC",
-        email: leadEmail,
-        firstName, lastName,
-        messageId: key,
-        subject: getSubject(),
-        snippet: getSnippet(),
-      });
-      if (!res.ok) {
-        showBanner(`<span>Could not sync: ${escapeHtml(res.error || "unknown error")}</span>`);
-        return;
-      }
-      showBanner(`<span>&#10003; Added <b>${escapeHtml(contactDisplayName(res.contact))}</b> to Fourlytic CRM and synced.</span>`);
-    });
-  }
+  if (document.getElementById("fourlytic-popover")?.classList.contains("open")) renderPopover();
 }
 
-function contactDisplayName(contact) {
-  return [contact.first_name, contact.last_name].filter(Boolean).join(" ") || contact.email;
-}
+/* ---------------- bootstrap ---------------- */
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-}
+ensureIcon();
+ensurePopover();
+positionIcon();
 
-// Gmail is a single-page app — watch for DOM changes (new thread opened)
-// and hash changes (navigating between threads), debounced.
+// Close the popover on an outside click.
+document.addEventListener("click", (e) => {
+  const pop = document.getElementById("fourlytic-popover");
+  const icon = document.getElementById("fourlytic-rail-icon");
+  if (!pop || !pop.classList.contains("open")) return;
+  if (pop.contains(e.target) || (icon && icon.contains(e.target))) return;
+  closePopover();
+});
+
+// Gmail is a single-page app — watch for DOM changes (new thread opened,
+// rail re-rendered) and hash changes (navigating between threads),
+// debounced.
 let debounceTimer = null;
 function scheduleProcess() {
   clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(processOpenThread, 600);
+  debounceTimer = setTimeout(() => {
+    positionIcon();
+    processOpenThread();
+  }, 600);
 }
 
 window.addEventListener("hashchange", scheduleProcess);
+window.addEventListener("resize", positionIcon);
 new MutationObserver(scheduleProcess).observe(document.body, { childList: true, subtree: true });
 scheduleProcess();
