@@ -572,12 +572,14 @@ const ICONS = {
   close: navIcon('<line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/>'),
   search: navIcon('<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'),
   plus: navIcon('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>'),
+  tasks: navIcon('<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>'),
 };
 function renderShell(){
   const navItems = [
     {id:'pipeline', label:'Pipeline', icon:ICONS.pipeline},
     {id:'contacts', label:'Contacts', icon:ICONS.contacts},
     {id:'companies', label:'Companies', icon:ICONS.companies},
+    {id:'tasks', label:'Tasks', icon:ICONS.tasks},
   ];
   return `
   <div class="shell">
@@ -620,6 +622,7 @@ function renderPage(){
   switch(state.route){
     case 'contacts': return renderContactsPage();
     case 'companies': return renderCompaniesPage();
+    case 'tasks': return renderTasksPage();
     case 'admin': return isAdmin() ? renderAdminPage() : renderPipelinePage();
     default: return renderPipelinePage();
   }
@@ -628,6 +631,7 @@ function bindPage(){
   switch(state.route){
     case 'contacts': return bindContactsPage();
     case 'companies': return bindCompaniesPage();
+    case 'tasks': return bindTasksPage();
     case 'admin': return isAdmin() ? bindAdminPage() : bindPipelinePage();
     default: return bindPipelinePage();
   }
@@ -770,6 +774,83 @@ function bindCompaniesPage(){
   document.querySelectorAll('tr[data-company]').forEach(el=> el.addEventListener('click', ()=> navigate('companies', {type:'company', id:el.dataset.company})));
   const nb = document.getElementById('newCompanyBtn');
   if (nb) nb.addEventListener('click', ()=> openCompanyModal());
+}
+
+/* ---------------- TASKS PAGE ---------------- */
+let taskStatusFilter = 'open'; // 'open' | 'done' | 'all'
+let taskAssigneeFilter = '';   // '' = everyone
+function parentLabel(type, id){
+  if (type==='contact'){ const c = contactById(id); return c ? contactName(c) : '(deleted contact)'; }
+  if (type==='company'){ const c = companyById(id); return c ? c.name : '(deleted company)'; }
+  if (type==='deal'){ const d = dealById(id); return d ? d.deal_name : '(deleted deal)'; }
+  return '—';
+}
+function isOverdue(t){
+  if (!t.due_date || t.done) return false;
+  return new Date(t.due_date) < new Date(new Date().toDateString());
+}
+function renderTasksPage(){
+  const loading = !state.loaded.tasks;
+  const q = state.search.trim().toLowerCase();
+  const assignees = Array.from(new Set(state.tasks.map(t=>t.assigned_to).filter(Boolean))).sort();
+  let list = state.tasks.slice();
+  if (taskStatusFilter==='open') list = list.filter(t=>!t.done);
+  else if (taskStatusFilter==='done') list = list.filter(t=>t.done);
+  if (taskAssigneeFilter) list = list.filter(t=>t.assigned_to===taskAssigneeFilter);
+  if (q) list = list.filter(t=> (t.title+' '+(t.assigned_to||'')+' '+parentLabel(t.parent_type,t.parent_id)).toLowerCase().includes(q));
+  list.sort((a,b)=>{
+    if (a.done !== b.done) return (a.done?1:0) - (b.done?1:0);
+    const ad = a.due_date ? new Date(a.due_date).getTime() : Infinity;
+    const bd = b.due_date ? new Date(b.due_date).getTime() : Infinity;
+    return ad - bd;
+  });
+  const openCount = state.tasks.filter(t=>!t.done).length;
+  const overdueCount = state.tasks.filter(isOverdue).length;
+  return `
+    ${topbar('Tasks', `${openCount} open${overdueCount?` · ${overdueCount} overdue`:''}`, `
+      <div class="search">${ICONS.search}<input id="tasksSearch" placeholder="Search tasks…" value="${esc(state.search)}"></div>
+      <select id="taskStatusSelect">
+        <option value="open" ${taskStatusFilter==='open'?'selected':''}>Open</option>
+        <option value="done" ${taskStatusFilter==='done'?'selected':''}>Done</option>
+        <option value="all" ${taskStatusFilter==='all'?'selected':''}>All</option>
+      </select>
+      <select id="taskAssigneeSelect">
+        <option value="">Everyone</option>
+        ${assignees.map(a=>`<option value="${esc(a)}" ${taskAssigneeFilter===a?'selected':''}>${esc(a)}</option>`).join('')}
+      </select>
+    `)}
+    ${loading ? `<div class="empty-state"><div class="big">⏳</div>Loading tasks…</div>` :
+      list.length===0 ? `<div class="table-wrap"><div class="empty-state"><div class="big">✅</div>No tasks match.</div></div>` :
+      `<div class="table-wrap"><table>
+        <thead><tr><th></th><th>Task</th><th>Due</th><th>Assigned to</th><th>Related to</th></tr></thead>
+        <tbody>
+          ${list.map(t=>{
+            const overdue = isOverdue(t);
+            return `<tr class="row-click" data-task-row="${t.parent_type}:${t.parent_id}">
+              <td><input type="checkbox" data-task="${t.id}" ${t.done?'checked':''}></td>
+              <td class="${t.done?'muted':''}" style="${t.done?'text-decoration:line-through;':''}">${esc(t.title)}</td>
+              <td ${overdue?'style="color:var(--bad); font-weight:600;"':'class="muted"'}>${t.due_date?fmtDate(t.due_date):'—'}</td>
+              <td class="muted">${esc(t.assigned_to)||'—'}</td>
+              <td><span class="pill" style="background:var(--surface-2);">${esc(parentLabel(t.parent_type,t.parent_id))}</span></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table></div>`}
+  `;
+}
+function bindTasksPage(){
+  const s = document.getElementById('tasksSearch');
+  if (s) s.addEventListener('input', ()=>{ state.search = s.value; rerenderMain(renderTasksPage, bindTasksPage); });
+  const statusSel = document.getElementById('taskStatusSelect');
+  if (statusSel) statusSel.addEventListener('change', ()=>{ taskStatusFilter = statusSel.value; rerenderMain(renderTasksPage, bindTasksPage); });
+  const assigneeSel = document.getElementById('taskAssigneeSelect');
+  if (assigneeSel) assigneeSel.addEventListener('change', ()=>{ taskAssigneeFilter = assigneeSel.value; rerenderMain(renderTasksPage, bindTasksPage); });
+  document.querySelectorAll('[data-task]').forEach(cb=> cb.addEventListener('click', e=> e.stopPropagation()));
+  document.querySelectorAll('[data-task]').forEach(cb=> cb.addEventListener('change', async ()=>{ await toggleTask(state.tasks.find(t=>t.id===cb.dataset.task)); }));
+  document.querySelectorAll('tr[data-task-row]').forEach(el=> el.addEventListener('click', ()=>{
+    const [type, id] = el.dataset.taskRow.split(':');
+    navigate(state.route, {type, id});
+  }));
 }
 
 /* ---------------- ADMIN PAGE ---------------- */
