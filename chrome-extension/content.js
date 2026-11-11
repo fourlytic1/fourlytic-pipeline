@@ -144,21 +144,27 @@ function renderPopover() {
     return;
   }
 
-  // Matched contact, not yet logged -- show the contact it will log to
-  // and confirm before writing anything.
+  // Matched contact, not yet logged -- show its fields, editable (like
+  // HubSpot's extension), and confirm before writing anything.
   if (s.type === "matched_confirm") {
     pop.innerHTML = `
       <div class="fourlytic-title">Fourlytic Gmail Sync</div>
-      <span>Sync this email to this contact in Fourlytic CRM?</span>
-      <span><b>${escapeHtml(s.name)}</b><br>${escapeHtml(s.email)}</span>
+      <span>Sync this email to this contact — edit if needed:</span>
+      <input id="fourlytic-matched-name" type="text" value="${escapeAttr(s.name)}" placeholder="Full name">
+      <input id="fourlytic-matched-email" type="text" value="${escapeAttr(s.email)}" placeholder="Email">
       <button id="fourlytic-confirm-btn">Confirm &amp; Sync</button>
     `;
     document.getElementById("fourlytic-confirm-btn").addEventListener("click", async (e) => {
       const btn = e.target;
+      const name = document.getElementById("fourlytic-matched-name").value.trim();
+      const email = document.getElementById("fourlytic-matched-email").value.trim();
+      if (!email) { btn.textContent = "Email is required"; return; }
       btn.disabled = true; btn.textContent = "Syncing…";
+      const { firstName, lastName } = splitName(name, email);
       const res = await chrome.runtime.sendMessage({
         type: "SYNC_EXISTING",
         contactId: s.contactId,
+        firstName, lastName, email,
         messageId: s.key,
         subject: s.subject,
         snippet: s.snippet,
@@ -167,7 +173,7 @@ function renderPopover() {
         pop.innerHTML = `<div class="fourlytic-title">Fourlytic Gmail Sync</div><span>Could not sync: ${escapeHtml(res.error || "unknown error")}</span>`;
         return;
       }
-      lastState = { type: "synced", name: s.name };
+      lastState = { type: "synced", name: name || s.name };
       setNeedsAction(false);
       renderPopover();
     });

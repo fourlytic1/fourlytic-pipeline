@@ -134,6 +134,18 @@ async function findSyncedEmail(session, messageId) {
   return rows && rows[0] ? rows[0] : null;
 }
 
+async function updateContact(session, contactId, { firstName, lastName, email }) {
+  await restFetch(session, `contacts?id=eq.${encodeURIComponent(contactId)}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=minimal" },
+    body: JSON.stringify({
+      first_name: firstName || email,
+      last_name: lastName || null,
+      email,
+    }),
+  });
+}
+
 async function createContact(session, { firstName, lastName, email }) {
   const rows = await restFetch(session, "contacts", {
     method: "POST",
@@ -204,6 +216,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       if (msg.type === "SYNC_EXISTING") {
+        if (msg.email) await updateContact(session, msg.contactId, msg);
         await logSyncedActivity(session, msg);
         sendResponse({ ok: true });
         return;
