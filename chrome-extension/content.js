@@ -180,24 +180,9 @@ function renderPopover() {
     return;
   }
 
-  // No matching contact -- two steps: preview the scraped details, then
-  // (same button, relabeled) edit them before confirming.
-  if (s.type === "unmatched_preview" || s.type === "unmatched_editing") {
-    const editing = s.type === "unmatched_editing";
-    if (!editing) {
-      pop.innerHTML = `
-        <div class="fourlytic-title">Fourlytic Gmail Sync</div>
-        <span>Not in Fourlytic CRM yet:</span>
-        <span><b>${escapeHtml(s.name)}</b><br>${escapeHtml(s.email)}</span>
-        <button id="fourlytic-add-btn">Add &amp; Sync</button>
-      `;
-      document.getElementById("fourlytic-add-btn").addEventListener("click", () => {
-        lastState = { ...s, type: "unmatched_editing" };
-        renderPopover();
-      });
-      return;
-    }
-
+  // No matching contact -- show editable fields right away (prefilled
+  // from Gmail), same single-step pattern as the matched-contact box.
+  if (s.type === "unmatched_editing") {
     pop.innerHTML = `
       <div class="fourlytic-title">Fourlytic Gmail Sync</div>
       <span>New contact details — edit if needed:</span>
@@ -335,7 +320,7 @@ async function processOpenThread() {
     }
   } else {
     lastState = {
-      type: "unmatched_preview",
+      type: "unmatched_editing",
       email: leadEmail,
       name: leadName || leadEmail,
       key, subject, snippet,
