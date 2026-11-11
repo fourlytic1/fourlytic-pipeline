@@ -472,10 +472,23 @@ async function saveDeal(data, id){
   return row.id;
 }
 async function setDealStage(deal, newStage, dropReason){
+  const prevStage = deal.stage;
+  const prevReason = deal.position_drop_reason;
+  // Optimistic update: move the card instantly instead of waiting on the
+  // network round-trip, then revert if the save actually fails.
+  deal.stage = newStage;
+  if (dropReason) deal.position_drop_reason = dropReason;
+  render();
   const payload = { stage:newStage, updated_at:new Date().toISOString() };
   if (dropReason) payload.position_drop_reason = dropReason;
   const { error } = await sb.from('deals').update(payload).eq('id', deal.id);
-  if (error) { toast(error.message, true); return; }
+  if (error) {
+    deal.stage = prevStage;
+    deal.position_drop_reason = prevReason;
+    render();
+    toast(error.message, true);
+    return;
+  }
   await addActivity('deal', deal.id, 'stage-change', `Stage changed to "${stageMeta(newStage).label}"`);
 }
 async function callManageUser(body){
