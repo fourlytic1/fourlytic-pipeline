@@ -239,6 +239,10 @@ textarea.note-input:focus{border-color:var(--accent); background:var(--surface);
   .form-grid{grid-template-columns:1fr;}
 }
 .menu-btn{display:none; all:unset; cursor:pointer; width:34px; height:34px; align-items:center; justify-content:center; border-radius:8px; border:1px solid var(--border); background:var(--surface); margin-right:8px;}
+.sidebar-backdrop{display:none;}
+@media (max-width: 760px){
+  .sidebar-backdrop{display:block; position:fixed; inset:0; background:rgba(10,14,18,.4); z-index:29;}
+}
 </style>
 </head>
 <body>
@@ -313,6 +317,12 @@ applyStoredTheme();
 
 /* ---------------- utils ---------------- */
 function esc(s){ return (s==null?'':String(s)).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function safeHref(url){
+  if (!url) return '';
+  const u = String(url).trim();
+  if (/^(https?:|mailto:|tel:)/i.test(u)) return u;
+  return 'https://' + u;
+}
 function initials(name){ return (name||'?').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase(); }
 function fmtDate(d){ if(!d) return '—'; try{ return new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});}catch(e){return d;} }
 function fmtDateTime(d){ if(!d) return '—'; try{ return new Date(d).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});}catch(e){return d;} }
@@ -380,43 +390,56 @@ async function subscribeAll(){
       .subscribe();
   }
 }
+const TYPING_PROTECTED_IDS = ['activityInput','taskTitle','taskDue'];
 async function reload(key, table){
   const { data, error } = await sb.from(table).select('*');
   if (error) { console.error(table, error); toast('Could not load '+table, true); return; }
   state[key] = data || [];
   state.loaded[key] = true;
+  // Don't blow away an in-progress note/task the user is typing in the
+  // open drawer just because an unrelated record changed elsewhere.
+  const active = document.activeElement;
+  if (active && TYPING_PROTECTED_IDS.includes(active.id)) return;
   render();
 }
 
 /* ---------------- auth ---------------- */
 async function tryLogin(username, password){
+  const genericErr = 'Invalid username or password.';
   const { data: email, error: lookupErr } = await sb.rpc('email_for_username', { p_username: username.trim() });
-  if (lookupErr || !email) return { ok:false, msg:'No account with that username.' };
+  if (lookupErr || !email) return { ok:false, msg:genericErr };
   const { error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) return { ok:false, msg:'Incorrect password.' };
+  if (error) return { ok:false, msg:genericErr };
   return { ok:true };
 }
 async function logout(){
   await sb.auth.signOut();
-  state.route='pipeline'; state.detail=null;
+  try{ await sb.removeAllChannels(); }catch(e){}
+  subscribed = false;
+  state.authed = false; state.me = null;
+  state.route='pipeline'; state.detail=null; state.search='';
+  state.users=[]; state.companies=[]; state.contacts=[]; state.deals=[]; state.activities=[]; state.tasks=[];
+  state.loaded = {users:false, companies:false, contacts:false, deals:false, activities:false, tasks:false};
   render();
 }
 
 /* ---------------- writes ---------------- */
 async function addActivity(parentType, parentId, kind, text){
-  if (!text || !text.trim()) return;
+  if (!text || !text.trim()) return false;
   const { error } = await sb.from('activities').insert({
     parent_type: parentType, parent_id: parentId, kind, text: text.trim(), by: state.me.displayName
   });
-  if (error) toast(error.message, true);
+  if (error) { toast(error.message, true); return false; }
+  return true;
 }
 async function addTask(parentType, parentId, title, dueDate){
-  if (!title || !title.trim()) return;
+  if (!title || !title.trim()) return false;
   const { error } = await sb.from('tasks').insert({
     parent_type: parentType, parent_id: parentId, title: title.trim(), due_date: dueDate||null,
     done:false, assigned_to: state.me.displayName, created_by: state.me.displayName
   });
-  if (error) toast(error.message, true);
+  if (error) { toast(error.message, true); return false; }
+  return true;
 }
 async function toggleTask(task){
   const { error } = await sb.from('tasks').update({ done: !task.done }).eq('id', task.id);
@@ -446,8 +469,10 @@ async function saveDeal(data, id){
   if (error) throw error;
   return row.id;
 }
-async function setDealStage(deal, newStage){
-  const { error } = await sb.from('deals').update({ stage:newStage, updated_at:new Date().toISOString() }).eq('id', deal.id);
+async function setDealStage(deal, newStage, dropReason){
+  const payload = { stage:newStage, updated_at:new Date().toISOString() };
+  if (dropReason) payload.position_drop_reason = dropReason;
+  const { error } = await sb.from('deals').update(payload).eq('id', deal.id);
   if (error) { toast(error.message, true); return; }
   await addActivity('deal', deal.id, 'stage-change', `Stage changed to "${stageMeta(newStage).label}"`);
 }
@@ -467,6 +492,7 @@ function navigate(route, detail){
   if (detail && (!state.detail || state.detail.type!==detail.type || state.detail.id!==detail.id)){
     drawerTab = 'overview';
   }
+  if (route !== state.route) state.search = ''; // don't carry a search term across pages
   state.route = route; state.detail = detail || null; state.sidebarOpen = false;
   render();
 }
@@ -546,8 +572,6 @@ const ICONS = {
   close: navIcon('<line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/>'),
   search: navIcon('<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>'),
   plus: navIcon('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>'),
-  sun: navIcon('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>'),
-  moon: navIcon('<path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>'),
 };
 function renderShell(){
   const navItems = [
@@ -557,6 +581,7 @@ function renderShell(){
   ];
   return `
   <div class="shell">
+    ${state.sidebarOpen ? '<div class="sidebar-backdrop" id="sidebarBackdrop"></div>' : ''}
     <nav class="sidebar ${state.sidebarOpen?'open':''}" id="sidebar">
       <div class="brand"><div class="mark"><img src="${isDarkActive() ? LOGO_MARK_LIGHT_SRC : LOGO_MARK_DARK_SRC}" alt="Fourlytic"></div><div class="name">Fourlytic Pipeline</div></div>
       <div class="nav">
@@ -585,6 +610,8 @@ function bindShell(){
   const tt2 = document.getElementById('themeToggleApp'); if (tt2) tt2.addEventListener('click', toggleTheme);
   const menuBtn = document.getElementById('menuBtn');
   if (menuBtn) menuBtn.addEventListener('click', ()=>{ state.sidebarOpen = !state.sidebarOpen; render(); });
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (backdrop) backdrop.addEventListener('click', ()=>{ state.sidebarOpen = false; render(); });
   bindPage();
   if (state.detail) bindDetailDrawer();
 }
@@ -729,7 +756,7 @@ function renderCompaniesPage(){
             return `<tr class="row-click" data-company="${c.id}">
               <td class="name-cell">${esc(c.name)}</td>
               <td class="muted">${esc(c.location)||'<span class="faint">—</span>'}</td>
-              <td class="muted">${c.website?esc(c.website):'<span class="faint">—</span>'}</td>
+              <td class="muted">${c.website?`<a href="${esc(safeHref(c.website))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(c.website)}</a>`:'<span class="faint">—</span>'}</td>
               <td class="muted">${n}</td>
             </tr>`;
           }).join('')}
@@ -831,16 +858,16 @@ function renderOverviewTab(type, obj){
       ${kv('Pseudo profile', esc(obj.pseudo_profile_name)||'—')}
       ${kv('Location', esc(obj.location)||'—')}
       ${kv('Connected', esc(obj.connected_info)||'—')}
-      ${kv('Recruiter LinkedIn', obj.recruiter_linkedin?`<a href="${esc(obj.recruiter_linkedin)}" target="_blank" rel="noopener">${esc(obj.recruiter_linkedin)}</a>`:'—')}
-      ${kv('Company LinkedIn', obj.company_linkedin?`<a href="${esc(obj.company_linkedin)}" target="_blank" rel="noopener">${esc(obj.company_linkedin)}</a>`:'—')}
+      ${kv('Recruiter LinkedIn', obj.recruiter_linkedin?`<a href="${esc(safeHref(obj.recruiter_linkedin))}" target="_blank" rel="noopener">${esc(obj.recruiter_linkedin)}</a>`:'—')}
+      ${kv('Company LinkedIn', obj.company_linkedin?`<a href="${esc(safeHref(obj.company_linkedin))}" target="_blank" rel="noopener">${esc(obj.company_linkedin)}</a>`:'—')}
       ${kv('Added', fmtDate(obj.created_at))}
     </div>`;
   }
   if (type==='company'){
     return `<div class="kv">
       ${kv('Name', esc(obj.name))}
-      ${kv('LinkedIn', obj.linkedin?`<a href="${esc(obj.linkedin)}" target="_blank" rel="noopener">${esc(obj.linkedin)}</a>`:'—')}
-      ${kv('Website', obj.website?`<a href="${esc(obj.website)}" target="_blank" rel="noopener">${esc(obj.website)}</a>`:'—')}
+      ${kv('LinkedIn', obj.linkedin?`<a href="${esc(safeHref(obj.linkedin))}" target="_blank" rel="noopener">${esc(obj.linkedin)}</a>`:'—')}
+      ${kv('Website', obj.website?`<a href="${esc(safeHref(obj.website))}" target="_blank" rel="noopener">${esc(obj.website)}</a>`:'—')}
       ${kv('Location', esc(obj.location)||'—')}
       ${kv('Notes', esc(obj.notes)||'—')}
       ${kv('Added', fmtDate(obj.created_at))}
@@ -928,23 +955,32 @@ function bindDetailDrawer(){
   document.querySelectorAll('.tab[data-tab]').forEach(t=> t.addEventListener('click', ()=>{ drawerTab = t.dataset.tab; rerenderDrawer(); }));
   document.querySelectorAll('[data-deal-link]').forEach(el=> el.addEventListener('click', ()=> navigate(state.route, {type:'deal', id:el.dataset.dealLink})));
   const stageSel = document.getElementById('stageSelect');
-  if (stageSel) stageSel.addEventListener('change', async ()=>{ await setDealStage(dealById(state.detail.id), stageSel.value); toast('Stage updated'); });
+  if (stageSel) stageSel.addEventListener('change', async ()=>{
+    const deal = dealById(state.detail.id);
+    const newStage = stageSel.value;
+    let reason;
+    if (newStage === 'lost' && !deal.position_drop_reason){
+      reason = window.prompt('Reason this deal is being marked Lost (optional):', '') || '';
+    }
+    await setDealStage(deal, newStage, reason);
+    toast('Stage updated');
+  });
   const addAct = document.getElementById('addActivityBtn');
   if (addAct) addAct.addEventListener('click', async ()=>{
     const txt = document.getElementById('activityInput').value;
     const kindSel = document.getElementById('activityKind');
     const kind = drawerTab==='notes' ? 'note' : (kindSel?kindSel.value:'general');
     if (!txt.trim()) return;
-    await addActivity(state.detail.type, state.detail.id, kind, txt);
-    toast('Added'); rerenderDrawer();
+    const ok = await addActivity(state.detail.type, state.detail.id, kind, txt);
+    if (ok){ toast('Added'); rerenderDrawer(); }
   });
   const addTaskBtn = document.getElementById('addTaskBtn');
   if (addTaskBtn) addTaskBtn.addEventListener('click', async ()=>{
     const title = document.getElementById('taskTitle').value;
     const due = document.getElementById('taskDue').value;
     if (!title.trim()) return;
-    await addTask(state.detail.type, state.detail.id, title, due);
-    toast('Task added'); rerenderDrawer();
+    const ok = await addTask(state.detail.type, state.detail.id, title, due);
+    if (ok){ toast('Task added'); rerenderDrawer(); }
   });
   document.querySelectorAll('[data-task]').forEach(cb=> cb.addEventListener('change', async ()=>{ await toggleTask(state.tasks.find(t=>t.id===cb.dataset.task)); }));
 }
@@ -1049,7 +1085,7 @@ function openDealModal(existing){
       <div><label>Contact</label><select id="f_contact"><option value="">—</option>${ctOptions}</select></div>
       <div><label>Date</label><input id="f_date" type="date" value="${existing?.date||''}"></div>
       <div><label>Stage</label><select id="f_stage">${STAGES.map(s=>`<option value="${s.id}" ${existing?.stage===s.id?'selected':''}>${s.label}</option>`).join('')}</select></div>
-      <div><label>Rate</label><input id="f_rate" type="number" value="${existing?.rate||''}"></div>
+      <div><label>Rate</label><input id="f_rate" type="number" min="0" step="0.01" value="${existing?.rate||''}"></div>
       <div><label>Rate type</label><select id="f_ratetype">${RATE_TYPES.map(r=>`<option ${existing?.rate_type===r?'selected':''}>${r}</option>`).join('')}</select></div>
       <div><label>Source</label><select id="f_source"><option value="">—</option>${SOURCES.map(s=>`<option ${existing?.source===s?'selected':''}>${s}</option>`).join('')}</select></div>
       <div><label>Job type</label><select id="f_jobtype"><option value="">—</option>${JOB_TYPES.map(s=>`<option ${existing?.job_type===s?'selected':''}>${s}</option>`).join('')}</select></div>
@@ -1072,6 +1108,7 @@ function openDealModal(existing){
         hr_call_by: wrap.querySelector('#f_hrcall').value.trim(), interview_by: wrap.querySelector('#f_interviewby').value.trim(),
         position_drop_reason: wrap.querySelector('#f_dropreason').value.trim(), notes: wrap.querySelector('#f_notes').value.trim(),
       };
+      if (data.rate !== null && data.rate < 0) return toast('Rate cannot be negative', true);
       try{
         const id = await saveDeal(data, existing?.id);
         closeModal(); toast(isEdit?'Deal updated':'Deal created');
@@ -1089,7 +1126,7 @@ function openUserModal(existing){
       <div><label>Display name *</label><input id="f_dn" value="${esc(existing?.display_name)}"></div>
       <div><label>Username *</label><input id="f_un" value="${esc(existing?.username)}" ${isEdit?'disabled':''}></div>
       ${!isEdit?`<div class="full"><label>Email *</label><input id="f_email" placeholder="e.g. ali@fourlytic.com"></div>`:''}
-      <div><label>${isEdit?'New password (leave blank to keep)':'Password *'}</label><input id="f_pw" type="text"></div>
+      <div><label>${isEdit?'New password (leave blank to keep)':'Password *'}</label><input id="f_pw" type="password" autocomplete="new-password"></div>
       <div><label>Role</label><select id="f_role"><option value="sales" ${existing?.role==='sales'?'selected':''}>Sales Executive</option><option value="admin" ${existing?.role==='admin'?'selected':''}>Admin</option></select></div>
       ${isEdit?`<div class="full"><label><input type="checkbox" id="f_active" ${existing.active!==false?'checked':''} style="width:auto; margin-right:7px;">Active</label></div>`:''}
     </div>

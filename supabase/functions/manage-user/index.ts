@@ -92,6 +92,18 @@ Deno.serve(async (req) => {
       const { targetId, displayName, role, active, password } = body;
       if (!targetId) return json({ error: "Missing targetId." }, 400);
 
+      // Guard: an admin may not demote or deactivate their own account.
+      // Without this, the only admin could accidentally lock everyone
+      // (including themselves) out of the Admin Panel with no recovery path.
+      if (targetId === user.id) {
+        if (role !== undefined && role !== "admin") {
+          return json({ error: "You can't change your own account's role away from admin." }, 400);
+        }
+        if (active !== undefined && active === false) {
+          return json({ error: "You can't deactivate your own account." }, 400);
+        }
+      }
+
       const patch: Record<string, unknown> = {};
       if (displayName !== undefined) patch.display_name = displayName;
       if (role !== undefined) patch.role = role;

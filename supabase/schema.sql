@@ -104,10 +104,14 @@ create table if not exists public.companies (
 alter table public.companies enable row level security;
 
 drop policy if exists "companies_rw_active_members" on public.companies;
-create policy "companies_rw_active_members"
-  on public.companies for all
-  using (public.is_active_member())
-  with check (public.is_active_member());
+drop policy if exists "companies_select_active_members" on public.companies;
+drop policy if exists "companies_insert_active_members" on public.companies;
+drop policy if exists "companies_update_active_members" on public.companies;
+drop policy if exists "companies_delete_admin_only" on public.companies;
+create policy "companies_select_active_members" on public.companies for select using (public.is_active_member());
+create policy "companies_insert_active_members" on public.companies for insert with check (public.is_active_member());
+create policy "companies_update_active_members" on public.companies for update using (public.is_active_member()) with check (public.is_active_member());
+create policy "companies_delete_admin_only" on public.companies for delete using (public.is_admin());
 
 -- ---------------------------------------------------------------
 -- CONTACTS
@@ -132,10 +136,14 @@ create table if not exists public.contacts (
 alter table public.contacts enable row level security;
 
 drop policy if exists "contacts_rw_active_members" on public.contacts;
-create policy "contacts_rw_active_members"
-  on public.contacts for all
-  using (public.is_active_member())
-  with check (public.is_active_member());
+drop policy if exists "contacts_select_active_members" on public.contacts;
+drop policy if exists "contacts_insert_active_members" on public.contacts;
+drop policy if exists "contacts_update_active_members" on public.contacts;
+drop policy if exists "contacts_delete_admin_only" on public.contacts;
+create policy "contacts_select_active_members" on public.contacts for select using (public.is_active_member());
+create policy "contacts_insert_active_members" on public.contacts for insert with check (public.is_active_member());
+create policy "contacts_update_active_members" on public.contacts for update using (public.is_active_member()) with check (public.is_active_member());
+create policy "contacts_delete_admin_only" on public.contacts for delete using (public.is_admin());
 
 -- ---------------------------------------------------------------
 -- DEALS
@@ -162,10 +170,14 @@ create table if not exists public.deals (
 alter table public.deals enable row level security;
 
 drop policy if exists "deals_rw_active_members" on public.deals;
-create policy "deals_rw_active_members"
-  on public.deals for all
-  using (public.is_active_member())
-  with check (public.is_active_member());
+drop policy if exists "deals_select_active_members" on public.deals;
+drop policy if exists "deals_insert_active_members" on public.deals;
+drop policy if exists "deals_update_active_members" on public.deals;
+drop policy if exists "deals_delete_admin_only" on public.deals;
+create policy "deals_select_active_members" on public.deals for select using (public.is_active_member());
+create policy "deals_insert_active_members" on public.deals for insert with check (public.is_active_member());
+create policy "deals_update_active_members" on public.deals for update using (public.is_active_member()) with check (public.is_active_member());
+create policy "deals_delete_admin_only" on public.deals for delete using (public.is_admin());
 
 -- ---------------------------------------------------------------
 -- ACTIVITIES (notes / calls / emails / conversations / stage changes)
@@ -182,10 +194,14 @@ create table if not exists public.activities (
 alter table public.activities enable row level security;
 
 drop policy if exists "activities_rw_active_members" on public.activities;
-create policy "activities_rw_active_members"
-  on public.activities for all
-  using (public.is_active_member())
-  with check (public.is_active_member());
+drop policy if exists "activities_select_active_members" on public.activities;
+drop policy if exists "activities_insert_active_members" on public.activities;
+drop policy if exists "activities_update_active_members" on public.activities;
+drop policy if exists "activities_delete_admin_only" on public.activities;
+create policy "activities_select_active_members" on public.activities for select using (public.is_active_member());
+create policy "activities_insert_active_members" on public.activities for insert with check (public.is_active_member());
+create policy "activities_update_active_members" on public.activities for update using (public.is_active_member()) with check (public.is_active_member());
+create policy "activities_delete_admin_only" on public.activities for delete using (public.is_admin());
 
 create index if not exists activities_parent_idx on public.activities(parent_type, parent_id);
 
@@ -206,10 +222,14 @@ create table if not exists public.tasks (
 alter table public.tasks enable row level security;
 
 drop policy if exists "tasks_rw_active_members" on public.tasks;
-create policy "tasks_rw_active_members"
-  on public.tasks for all
-  using (public.is_active_member())
-  with check (public.is_active_member());
+drop policy if exists "tasks_select_active_members" on public.tasks;
+drop policy if exists "tasks_insert_active_members" on public.tasks;
+drop policy if exists "tasks_update_active_members" on public.tasks;
+drop policy if exists "tasks_delete_admin_only" on public.tasks;
+create policy "tasks_select_active_members" on public.tasks for select using (public.is_active_member());
+create policy "tasks_insert_active_members" on public.tasks for insert with check (public.is_active_member());
+create policy "tasks_update_active_members" on public.tasks for update using (public.is_active_member()) with check (public.is_active_member());
+create policy "tasks_delete_admin_only" on public.tasks for delete using (public.is_admin());
 
 create index if not exists tasks_parent_idx on public.tasks(parent_type, parent_id);
 
