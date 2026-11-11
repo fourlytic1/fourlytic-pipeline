@@ -8,51 +8,52 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Inter:wght@400;500;600;700&display=swap">
 <style>
 :root{
-  --bg:#F8FAFC; --surface:#FFFFFF; --surface-2:#F1F5F9;
-  --border:#E2E8F0; --fg:#0F172A; --fg-muted:#475569; --fg-faint:#94A3B8;
-  --accent:#1172A3; --accent-fg:#FFFFFF; --accent-soft:#E5F1F6;
-  --good:#1F9D6B; --good-soft:#E3F6EC;
-  --bad:#D1453B; --bad-soft:#FBEAE8;
-  --warn:#C38A3D; --warn-soft:#FAF0E0;
-  --info:#4870B0; --info-soft:#EAF0FA;
-  --shadow: 0 1px 2px rgba(15,23,42,.05), 0 6px 18px rgba(15,23,42,.06);
+  --bg:#F7F7FB; --surface:#FFFFFF; --surface-2:#F1F1F8;
+  --border:#E4E4F0; --fg:#15162B; --fg-muted:#5B5D78; --fg-faint:#9394AC;
+  --accent:#5B4FE8; --accent-2:#00B8A9; --accent-fg:#FFFFFF; --accent-soft:#EEEBFC;
+  --accent-grad: linear-gradient(135deg, var(--accent), var(--accent-2));
+  --good:#16A364; --good-soft:#E1F7EC;
+  --bad:#E5484D; --bad-soft:#FDE8E8;
+  --warn:#F5A524; --warn-soft:#FEF3DD;
+  --info:#3E7BFA; --info-soft:#E8F0FE;
+  --shadow: 0 1px 2px rgba(21,22,43,.05), 0 8px 22px rgba(91,79,232,.08);
   --font-display:'Space Grotesk', 'Segoe UI', sans-serif;
   --font-body:'Inter', 'Segoe UI', sans-serif;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --bg:#0B1220; --surface:#141C2B; --surface-2:#1A2234;
-    --border:#262F42; --fg:#EEF2F7; --fg-muted:#94A3B8; --fg-faint:#64748B;
-    --accent:#5BB8D4; --accent-fg:#06222B; --accent-soft:#163440;
-    --good:#4ECB8F; --good-soft:#153528;
-    --bad:#E88179; --bad-soft:#3A2220;
-    --warn:#E0AC63; --warn-soft:#3A2C18;
-    --info:#86AEE8; --info-soft:#1C2B42;
-    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 22px rgba(0,0,0,.4);
+    --bg:#0E0E1A; --surface:#16172A; --surface-2:#1D1E36;
+    --border:#2A2B48; --fg:#F1F1FA; --fg-muted:#A3A4C2; --fg-faint:#6C6D8C;
+    --accent:#8C7FFF; --accent-2:#2DD4C4; --accent-fg:#0E0E1A; --accent-soft:#241F4A;
+    --good:#3DD68C; --good-soft:#113524;
+    --bad:#FF6369; --bad-soft:#3A1620;
+    --warn:#FFC256; --warn-soft:#3A2A10;
+    --info:#6EA8FF; --info-soft:#182540;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 10px 26px rgba(0,0,0,.45);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"]{
-  --bg:#0B1220; --surface:#141C2B; --surface-2:#1A2234;
-  --border:#262F42; --fg:#EEF2F7; --fg-muted:#94A3B8; --fg-faint:#64748B;
-  --accent:#5BB8D4; --accent-fg:#06222B; --accent-soft:#163440;
-  --good:#4ECB8F; --good-soft:#153528;
-  --bad:#E88179; --bad-soft:#3A2220;
-  --warn:#E0AC63; --warn-soft:#3A2C18;
-  --info:#86AEE8; --info-soft:#1C2B42;
-  --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 22px rgba(0,0,0,.4);
+  --bg:#0E0E1A; --surface:#16172A; --surface-2:#1D1E36;
+  --border:#2A2B48; --fg:#F1F1FA; --fg-muted:#A3A4C2; --fg-faint:#6C6D8C;
+  --accent:#8C7FFF; --accent-2:#2DD4C4; --accent-fg:#0E0E1A; --accent-soft:#241F4A;
+  --good:#3DD68C; --good-soft:#113524;
+  --bad:#FF6369; --bad-soft:#3A1620;
+  --warn:#FFC256; --warn-soft:#3A2A10;
+  --info:#6EA8FF; --info-soft:#182540;
+  --shadow: 0 1px 2px rgba(0,0,0,.35), 0 10px 26px rgba(0,0,0,.45);
   color-scheme: dark;
 }
 :root[data-theme="light"]{
-  --bg:#F8FAFC; --surface:#FFFFFF; --surface-2:#F1F5F9;
-  --border:#E2E8F0; --fg:#0F172A; --fg-muted:#475569; --fg-faint:#94A3B8;
-  --accent:#1172A3; --accent-fg:#FFFFFF; --accent-soft:#E5F1F6;
-  --good:#1F9D6B; --good-soft:#E3F6EC;
-  --bad:#D1453B; --bad-soft:#FBEAE8;
-  --warn:#C38A3D; --warn-soft:#FAF0E0;
-  --info:#4870B0; --info-soft:#EAF0FA;
-  --shadow: 0 1px 2px rgba(15,23,42,.05), 0 6px 18px rgba(15,23,42,.06);
+  --bg:#F7F7FB; --surface:#FFFFFF; --surface-2:#F1F1F8;
+  --border:#E4E4F0; --fg:#15162B; --fg-muted:#5B5D78; --fg-faint:#9394AC;
+  --accent:#5B4FE8; --accent-2:#00B8A9; --accent-fg:#FFFFFF; --accent-soft:#EEEBFC;
+  --good:#16A364; --good-soft:#E1F7EC;
+  --bad:#E5484D; --bad-soft:#FDE8E8;
+  --warn:#F5A524; --warn-soft:#FEF3DD;
+  --info:#3E7BFA; --info-soft:#E8F0FE;
+  --shadow: 0 1px 2px rgba(21,22,43,.05), 0 8px 22px rgba(91,79,232,.08);
   color-scheme: light;
 }
 *{box-sizing:border-box;}
@@ -73,7 +74,7 @@ button, input, select, textarea{font-family:inherit; font-size:inherit; color:in
 .shell{display:flex; height:100%;}
 .sidebar{width:220px; flex:none; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; padding:18px 0;}
 .brand{display:flex; align-items:center; gap:10px; padding:0 18px 18px; border-bottom:1px solid var(--border); margin-bottom:10px;}
-.brand .mark{width:28px; height:28px; border-radius:8px; background:var(--accent); color:var(--accent-fg); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:700; font-size:14px;}
+.brand .mark{width:28px; height:28px; border-radius:8px; background:var(--accent-grad); color:var(--accent-fg); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:700; font-size:14px; box-shadow:0 2px 8px rgba(91,79,232,.35);}
 .brand .name{font-family:var(--font-display); font-weight:700; font-size:15px;}
 .nav{display:flex; flex-direction:column; gap:2px; padding:0 10px;}
 .nav button{all:unset; cursor:pointer; padding:9px 12px; border-radius:8px; color:var(--fg-muted); display:flex; align-items:center; gap:10px; font-size:13.5px; font-weight:500;}
@@ -104,8 +105,8 @@ button, input, select, textarea{font-family:inherit; font-size:inherit; color:in
 .search svg{position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--fg-faint);}
 
 .btn{all:unset; cursor:pointer; display:inline-flex; align-items:center; gap:7px; padding:8px 14px; border-radius:8px; font-weight:600; font-size:13px; border:1px solid transparent;}
-.btn-primary{background:var(--accent); color:var(--accent-fg);}
-.btn-primary:hover{filter:brightness(1.06);}
+.btn-primary{background:var(--accent-grad); color:var(--accent-fg); box-shadow:0 2px 10px rgba(91,79,232,.25);}
+.btn-primary:hover{filter:brightness(1.08); box-shadow:0 4px 14px rgba(91,79,232,.35);}
 .btn-ghost{background:var(--surface); border-color:var(--border); color:var(--fg);}
 .btn-ghost:hover{background:var(--surface-2);}
 .btn:disabled{opacity:.5; cursor:not-allowed;}
@@ -113,7 +114,7 @@ button, input, select, textarea{font-family:inherit; font-size:inherit; color:in
 
 .login-wrap{min-height:100%; display:flex; align-items:center; justify-content:center; padding:24px;}
 .login-card{position:relative; width:100%; max-width:360px; background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:32px 28px; box-shadow:var(--shadow);}
-.login-card .mark{width:40px; height:40px; border-radius:11px; background:var(--accent); color:var(--accent-fg); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:700; font-size:18px; margin-bottom:16px;}
+.login-card .mark{width:40px; height:40px; border-radius:11px; background:var(--accent-grad); color:var(--accent-fg); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-weight:700; font-size:18px; margin-bottom:16px; box-shadow:0 4px 14px rgba(91,79,232,.3);}
 .login-card h1{font-size:19px; margin-bottom:4px;}
 .login-card p.lead{color:var(--fg-muted); font-size:13px; margin-bottom:22px;}
 .field{margin-bottom:14px;}
@@ -249,16 +250,16 @@ const SUPABASE_ANON_KEY = "sb_publishable_lAdlOIv3DQYAVI-BoTkESg_0pE9halW";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const STAGES = [
-  {id:'contacted',   label:'Contacted',          color:'var(--fg-faint)'},
-  {id:'hr_call',      label:'HR Call',            color:'var(--info)'},
-  {id:'interview_assign', label:'Interview Assign', color:'var(--info)'},
-  {id:'awaiting_feedback', label:'Awaiting Feedback', color:'var(--warn)'},
-  {id:'interview',    label:'Interview',          color:'var(--info)'},
-  {id:'rescheduled',  label:'Rescheduled',        color:'var(--warn)'},
-  {id:'hire_feedback', label:'Hire Feedback',     color:'var(--warn)'},
-  {id:'nurture',      label:'Nurture',            color:'var(--fg-faint)'},
-  {id:'won',          label:'Won',                color:'var(--good)'},
-  {id:'lost',         label:'Lost',               color:'var(--bad)'},
+  {id:'contacted',   label:'Contacted',          color:'#94A3B8'},
+  {id:'hr_call',      label:'HR Call',            color:'#3B82F6'},
+  {id:'interview_assign', label:'Interview Assign', color:'#8B5CF6'},
+  {id:'awaiting_feedback', label:'Awaiting Feedback', color:'#F59E0B'},
+  {id:'interview',    label:'Interview',          color:'#06B6D4'},
+  {id:'rescheduled',  label:'Rescheduled',        color:'#F97316'},
+  {id:'hire_feedback', label:'Hire Feedback',     color:'#EC4899'},
+  {id:'nurture',      label:'Nurture',            color:'#84CC16'},
+  {id:'won',          label:'Won',                color:'#22C55E'},
+  {id:'lost',         label:'Lost',               color:'#EF4444'},
 ];
 const SOURCES = ['LinkedIn','Email Outreach','Inbound','Referral'];
 const JOB_TYPES = ['Remote','Hybrid','Onsite'];
