@@ -460,26 +460,50 @@ async function toggleTask(task){
 }
 async function saveCompany(data, id){
   const payload = {...data};
-  if (id){ payload.updated_at = new Date().toISOString(); const { error } = await sb.from('companies').update(payload).eq('id', id); if(error) throw error; return id; }
+  if (id){
+    payload.updated_at = new Date().toISOString();
+    const { data: row, error } = await sb.from('companies').update(payload).eq('id', id).select().single();
+    if (error) throw error;
+    const existing = companyById(id);
+    if (existing && row) Object.assign(existing, row);
+    return id;
+  }
   payload.created_by = state.me.displayName;
   const { data: row, error } = await sb.from('companies').insert(payload).select().single();
   if (error) throw error;
+  state.companies.push(row); // show it immediately, don't wait on the realtime refetch
   return row.id;
 }
 async function saveContact(data, id){
   const payload = {...data};
-  if (id){ payload.updated_at = new Date().toISOString(); const { error } = await sb.from('contacts').update(payload).eq('id', id); if(error) throw error; return id; }
+  if (id){
+    payload.updated_at = new Date().toISOString();
+    const { data: row, error } = await sb.from('contacts').update(payload).eq('id', id).select().single();
+    if (error) throw error;
+    const existing = contactById(id);
+    if (existing && row) Object.assign(existing, row);
+    return id;
+  }
   payload.created_by = state.me.displayName;
   const { data: row, error } = await sb.from('contacts').insert(payload).select().single();
   if (error) throw error;
+  state.contacts.push(row);
   return row.id;
 }
 async function saveDeal(data, id){
   const payload = {...data};
-  if (id){ payload.updated_at = new Date().toISOString(); const { error } = await sb.from('deals').update(payload).eq('id', id); if(error) throw error; return id; }
+  if (id){
+    payload.updated_at = new Date().toISOString();
+    const { data: row, error } = await sb.from('deals').update(payload).eq('id', id).select().single();
+    if (error) throw error;
+    const existing = dealById(id);
+    if (existing && row) Object.assign(existing, row);
+    return id;
+  }
   payload.created_by = state.me.displayName; payload.updated_at = new Date().toISOString();
   const { data: row, error } = await sb.from('deals').insert(payload).select().single();
   if (error) throw error;
+  state.deals.push(row);
   return row.id;
 }
 async function setDealStage(deal, newStage, dropReason){
