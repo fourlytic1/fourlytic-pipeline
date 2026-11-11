@@ -255,6 +255,11 @@ create policy "synced_emails_delete_admin_only" on public.synced_emails for dele
 
 create index if not exists synced_emails_contact_idx on public.synced_emails(contact_id);
 
+-- RLS policies restrict access, but PostgREST also needs the base
+-- table GRANT itself, or every request fails with "permission denied
+-- for table synced_emails" before RLS is even evaluated.
+grant select, insert, delete on public.synced_emails to authenticated;
+
 -- ---------------------------------------------------------------
 -- REALTIME — so the app gets live updates across viewers
 -- (idempotent: safe to re-run this whole file against a database
