@@ -80,6 +80,7 @@
   font-family: inherit;
 }
 #fourlytic-popover input::placeholder { color: #7a858f; }
+#fourlytic-popover .fourlytic-last-synced { font-size: 11px; color: #9aa4ad; }
 
 /* Compose-window recipient badges: a small dot next to each chip. */
 .fourlytic-compose-badge {

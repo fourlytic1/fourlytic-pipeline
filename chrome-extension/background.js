@@ -134,6 +134,14 @@ async function findSyncedEmail(session, messageId) {
   return rows && rows[0] ? rows[0] : null;
 }
 
+async function getLastSyncedAt(session, contactId) {
+  const rows = await restFetch(
+    session,
+    `synced_emails?contact_id=eq.${encodeURIComponent(contactId)}&select=created_at&order=created_at.desc&limit=1`
+  );
+  return rows && rows[0] ? rows[0].created_at : null;
+}
+
 async function updateContact(session, contactId, { firstName, lastName, email }) {
   await restFetch(session, `contacts?id=eq.${encodeURIComponent(contactId)}`, {
     method: "PATCH",
@@ -207,11 +215,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (!session) { sendResponse({ ok: false, error: "not_logged_in" }); return; }
 
       if (msg.type === "CHECK_EMAIL") {
-        const [contact, synced] = await Promise.all([
-          findContactByEmail(session, msg.senderEmail),
+        const contact = await findContactByEmail(session, msg.senderEmail);
+        const [synced, lastSyncedAt] = await Promise.all([
           findSyncedEmail(session, msg.messageId),
+          contact ? getLastSyncedAt(session, contact.id) : Promise.resolve(null),
         ]);
-        sendResponse({ ok: true, contact, alreadySynced: !!synced });
+        sendResponse({ ok: true, contact, alreadySynced: !!synced, lastSyncedAt });
         return;
       }
 

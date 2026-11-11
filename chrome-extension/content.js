@@ -140,18 +140,25 @@ function renderPopover() {
   }
 
   if (s.type === "synced") {
-    pop.innerHTML = `<div class="fourlytic-title">Fourlytic Gmail Sync</div><span>&#10003; Synced to <b>${escapeHtml(s.name)}</b> in Fourlytic CRM.</span>`;
+    const lastSyncedLine = s.lastSyncedAt
+      ? `<span class="fourlytic-last-synced">Last synced ${formatRelativeTime(s.lastSyncedAt)}</span>`
+      : "";
+    pop.innerHTML = `<div class="fourlytic-title">Fourlytic Gmail Sync</div><span>&#10003; Synced to <b>${escapeHtml(s.name)}</b> in Fourlytic CRM.</span>${lastSyncedLine}`;
     return;
   }
 
   // Matched contact, not yet logged -- show its fields, editable (like
   // HubSpot's extension), and confirm before writing anything.
   if (s.type === "matched_confirm") {
+    const lastSyncedLine = s.lastSyncedAt
+      ? `<span class="fourlytic-last-synced">Last synced ${formatRelativeTime(s.lastSyncedAt)}</span>`
+      : `<span class="fourlytic-last-synced">Never synced before</span>`;
     pop.innerHTML = `
       <div class="fourlytic-title">Fourlytic Gmail Sync</div>
       <span>Sync this email to this contact — edit if needed:</span>
       <input id="fourlytic-matched-name" type="text" value="${escapeAttr(s.name)}" placeholder="Full name">
       <input id="fourlytic-matched-email" type="text" value="${escapeAttr(s.email)}" placeholder="Email">
+      ${lastSyncedLine}
       <button id="fourlytic-confirm-btn">Confirm &amp; Sync</button>
     `;
     document.getElementById("fourlytic-confirm-btn").addEventListener("click", async (e) => {
@@ -173,7 +180,7 @@ function renderPopover() {
         pop.innerHTML = `<div class="fourlytic-title">Fourlytic Gmail Sync</div><span>Could not sync: ${escapeHtml(res.error || "unknown error")}</span>`;
         return;
       }
-      lastState = { type: "synced", name: name || s.name };
+      lastState = { type: "synced", name: name || s.name, lastSyncedAt: new Date().toISOString() };
       setNeedsAction(false);
       renderPopover();
     });
@@ -208,7 +215,7 @@ function renderPopover() {
         pop.innerHTML = `<div class="fourlytic-title">Fourlytic Gmail Sync</div><span>Could not sync: ${escapeHtml(res.error || "unknown error")}</span>`;
         return;
       }
-      lastState = { type: "synced", name: contactDisplayName(res.contact) };
+      lastState = { type: "synced", name: contactDisplayName(res.contact), lastSyncedAt: new Date().toISOString() };
       setNeedsAction(false);
       renderPopover();
     });
@@ -269,6 +276,20 @@ function escapeAttr(s) {
   return escapeHtml(s).replace(/\n/g, "&#10;");
 }
 
+function formatRelativeTime(iso) {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+  const diffMs = Date.now() - then;
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} minute${mins === 1 ? "" : "s"} ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
 /* ---------------- thread processing ---------------- */
 
 async function processOpenThread() {
@@ -306,13 +327,14 @@ async function processOpenThread() {
 
   if (check.contact) {
     if (check.alreadySynced) {
-      lastState = { type: "synced", name: contactDisplayName(check.contact) };
+      lastState = { type: "synced", name: contactDisplayName(check.contact), lastSyncedAt: check.lastSyncedAt };
       setNeedsAction(false);
     } else {
       lastState = {
         type: "matched_confirm",
         contactId: check.contact.id,
         name: contactDisplayName(check.contact),
+        lastSyncedAt: check.lastSyncedAt,
         email: check.contact.email,
         key, subject, snippet,
       };
