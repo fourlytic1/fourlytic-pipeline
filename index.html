@@ -428,24 +428,35 @@ async function logout(){
 /* ---------------- writes ---------------- */
 async function addActivity(parentType, parentId, kind, text){
   if (!text || !text.trim()) return false;
-  const { error } = await sb.from('activities').insert({
+  const { data, error } = await sb.from('activities').insert({
     parent_type: parentType, parent_id: parentId, kind, text: text.trim(), by: state.me.displayName
-  });
+  }).select().single();
   if (error) { toast(error.message, true); return false; }
+  // Add it to local state immediately instead of waiting on the realtime
+  // echo to come back and refetch the whole table.
+  if (data) state.activities.push(data);
   return true;
 }
 async function addTask(parentType, parentId, title, dueDate){
   if (!title || !title.trim()) return false;
-  const { error } = await sb.from('tasks').insert({
+  const { data, error } = await sb.from('tasks').insert({
     parent_type: parentType, parent_id: parentId, title: title.trim(), due_date: dueDate||null,
     done:false, assigned_to: state.me.displayName, created_by: state.me.displayName
-  });
+  }).select().single();
   if (error) { toast(error.message, true); return false; }
+  if (data) state.tasks.push(data);
   return true;
 }
 async function toggleTask(task){
-  const { error } = await sb.from('tasks').update({ done: !task.done }).eq('id', task.id);
-  if (error) toast(error.message, true);
+  const prev = task.done;
+  task.done = !task.done; // optimistic
+  render();
+  const { error } = await sb.from('tasks').update({ done: task.done }).eq('id', task.id);
+  if (error) {
+    task.done = prev;
+    render();
+    toast(error.message, true);
+  }
 }
 async function saveCompany(data, id){
   const payload = {...data};
