@@ -270,7 +270,32 @@ const LOGO_MARK_LIGHT_SRC = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAA
 const SUPABASE_URL = "https://rnblkqlmfxwjgfsujyxg.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_lAdlOIv3DQYAVI-BoTkESg_0pE9halW";
 
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// Supabase-js serializes auth-token refreshes across browser tabs using
+// the Web Locks API (navigator.locks). If a tab/context dies without
+// releasing that lock, every future call hangs forever ("Saving...",
+// stuck "Signing in..."), with zero network activity and no error —
+// we hit this exact deadlock in testing. Fix: never let the lock wait
+// more than a few seconds — if it can't be acquired in time, proceed
+// without it instead of hanging. Worst case is a harmless duplicate
+// refresh; a permanent hang is far worse.
+async function timeoutSafeLock(name, acquireTimeout, fn) {
+  if (typeof navigator === "undefined" || !navigator.locks) return fn();
+  const ms = acquireTimeout && acquireTimeout > 0 ? acquireTimeout : 8000;
+  try {
+    return await navigator.locks.request(
+      name,
+      { signal: AbortSignal.timeout(ms) },
+      () => fn()
+    );
+  } catch (e) {
+    console.warn("Fourlytic: auth lock timed out after " + ms + "ms, proceeding without it.", e);
+    return fn();
+  }
+}
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { lock: timeoutSafeLock },
+});
 
 const STAGES = [
   {id:'contacted',   label:'Contacted',          color:'#94A3B8'},
