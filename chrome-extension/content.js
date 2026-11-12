@@ -41,6 +41,12 @@ let lastState = null; // { type, ...fields } for the current thread; see process
 // handling lives on the icon itself, wired up once in ensureIcon().
 let customIconPos = null; // null = not dragged yet -> auto-dock
 let customIconPosLoaded = false;
+// True for the whole pointerdown..pointerup span. Gmail's own DOM churns
+// constantly, which re-triggers our MutationObserver -> positionIcon()
+// mid-drag; without this guard that call would see customIconPos still
+// null (it's only committed on pointerup) and snap the icon straight
+// back to its auto-docked spot, fighting the drag in real time.
+let isDraggingIcon = false;
 chrome.storage.local.get("fourlyticIconPos", ({ fourlyticIconPos }) => {
   customIconPos = fourlyticIconPos || null;
   customIconPosLoaded = true;
@@ -68,6 +74,7 @@ function wireDrag(icon) {
   icon.addEventListener("pointerdown", (e) => {
     if (e.button !== undefined && e.button !== 0) return; // left button / touch only
     dragging = true;
+    isDraggingIcon = true;
     moved = false;
     startX = e.clientX;
     startY = e.clientY;
@@ -96,6 +103,7 @@ function wireDrag(icon) {
   icon.addEventListener("pointerup", (e) => {
     if (!dragging) return;
     dragging = false;
+    isDraggingIcon = false;
     icon.classList.remove("dragging");
     icon.releasePointerCapture(e.pointerId);
     if (moved) {
@@ -105,6 +113,16 @@ function wireDrag(icon) {
     } else {
       togglePopover(); // a plain click, no drag
     }
+  });
+
+  // If the browser interrupts the gesture (e.g. focus loss, Gmail
+  // handling the pointer elsewhere) we still must clear isDraggingIcon,
+  // or positionIcon() would stay frozen forever.
+  icon.addEventListener("pointercancel", () => {
+    if (!dragging) return;
+    dragging = false;
+    isDraggingIcon = false;
+    icon.classList.remove("dragging");
   });
 }
 
@@ -155,6 +173,7 @@ function findRailAnchor() {
 }
 
 function positionIcon() {
+  if (isDraggingIcon) return; // don't fight an in-progress drag (see note above)
   const icon = document.getElementById("fourlytic-rail-icon");
   if (!icon) return;
 
