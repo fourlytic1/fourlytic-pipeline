@@ -96,13 +96,25 @@ async function logout() {
   await clearSession();
 }
 
+// Several callers can land here at once (e.g. one CHECK_EMAIL per
+// compose-window recipient chip, fired in a loop with no await between
+// them). Without this, each one independently POSTs the SAME refresh
+// token to /auth/v1/token?grant_type=refresh_token at once; Supabase's
+// refresh-token rotation treats all but the first as reusing an already-
+// rotated token and can fail them, or in stricter configurations revoke
+// the whole session. Sharing one in-flight refresh fixes that.
+let refreshPromise = null;
+
 // Returns a session with a valid (non-expired) access token, refreshing
 // it first if needed. Returns null if not logged in or refresh fails.
 async function getValidSession() {
   let session = await getSession();
   if (!session) return null;
   if (Date.now() > session.expires_at - 60000) {
-    session = await refreshSession(session);
+    if (!refreshPromise) {
+      refreshPromise = refreshSession(session).finally(() => { refreshPromise = null; });
+    }
+    session = await refreshPromise;
     if (!session) { await clearSession(); return null; }
   }
   return session;
@@ -120,12 +132,34 @@ async function restFetch(session, path, options = {}) {
     },
   });
   const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error((data && (data.message || data.error)) || `Request failed (${res.status})`);
+  if (!res.ok) {
+    const err = new Error((data && (data.message || data.error)) || `Request failed (${res.status})`);
+    err.status = res.status; // lets callers tell "expected conflict" apart from a real failure
+    throw err;
+  }
   return data;
 }
 
+// Escapes ilike's own wildcard characters so an email containing a
+// literal "%" or "_" (rare but valid) can't be (mis)treated as a
+// pattern -- this keeps the ilike filter a plain case-insensitive exact
+// match, nothing more.
+function escapeIlike(value) {
+  return value.replace(/[\\%_]/g, (c) => "\\" + c);
+}
+
 async function findContactByEmail(session, email) {
-  const rows = await restFetch(session, `contacts?email=eq.${encodeURIComponent(email)}&select=*&limit=1`);
+  // Case-insensitive on purpose: Gmail always hands us a lowercased
+  // address, but a contact may have been entered with mixed case
+  // elsewhere in the CRM. A case-sensitive eq. match would silently
+  // miss that contact and let a duplicate get created for the same
+  // person. order=created_at.asc makes the pick deterministic if a
+  // duplicate already exists (oldest wins, consistently) rather than
+  // whatever order Postgres happens to return.
+  const rows = await restFetch(
+    session,
+    `contacts?email=ilike.${encodeURIComponent(escapeIlike(email))}&select=*&order=created_at.asc&limit=1`
+  );
   return rows && rows[0] ? rows[0] : null;
 }
 
@@ -181,14 +215,23 @@ async function logSyncedActivity(session, { contactId, messageId, subject, snipp
     }),
   });
   // Best-effort de-dupe marker; if another tab/message races us and the
-  // unique constraint trips, that's fine — it just means it's logged.
+  // gmail_message_id unique constraint trips (HTTP 409), that's fine —
+  // it just means it's already logged. Anything else (network failure,
+  // RLS denial, a dropped connection) must NOT be swallowed here: the
+  // caller already reported this sync as a success, so a swallowed
+  // failure here would leave the thread looking "synced" with no
+  // dedupe row behind it -- the next time anyone opens it, it would
+  // look unsynced again and logSyncedActivity's unconditional insert
+  // above would write a second (third, fourth...) activity row.
   try {
     await restFetch(session, "synced_emails", {
       method: "POST",
       headers: { Prefer: "return=minimal" },
       body: JSON.stringify({ gmail_message_id: messageId, contact_id: contactId, synced_by: session.display_name }),
     });
-  } catch (e) { /* likely a duplicate — fine */ }
+  } catch (e) {
+    if (e.status !== 409) throw e;
+  }
 }
 
 /* ---------------- message handling ---------------- */
@@ -216,10 +259,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
       if (msg.type === "CHECK_EMAIL") {
         const contact = await findContactByEmail(session, msg.senderEmail);
-        const [synced, lastSyncedAt] = await Promise.all([
-          findSyncedEmail(session, msg.messageId),
-          contact ? getLastSyncedAt(session, contact.id) : Promise.resolve(null),
-        ]);
+        // The compose-badge scan only needs "is this a contact?" -- skip
+        // the sync-log lookups it never uses, so a reply with several
+        // recipients doesn't fire two extra queries per chip for
+        // nothing.
+        let synced = false, lastSyncedAt = null;
+        if (!msg.skipSyncCheck) {
+          [synced, lastSyncedAt] = await Promise.all([
+            findSyncedEmail(session, msg.messageId),
+            contact ? getLastSyncedAt(session, contact.id) : Promise.resolve(null),
+          ]);
+        }
         sendResponse({ ok: true, contact, alreadySynced: !!synced, lastSyncedAt });
         return;
       }
@@ -232,6 +282,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
 
       if (msg.type === "CREATE_AND_SYNC") {
+        // Re-check for an existing contact right before creating one.
+        // This covers two real races: (a) the user retrying after a
+        // network drop between createContact() and logSyncedActivity()
+        // on an earlier attempt -- which left a contact already
+        // created with no activity logged -- and (b) another team
+        // member creating the same contact in the few seconds since
+        // this popover opened. Either way, reusing what's there beats
+        // creating a second row for the same person.
+        const existing = await findContactByEmail(session, msg.email);
+        if (existing) {
+          await updateContact(session, existing.id, msg);
+          await logSyncedActivity(session, { ...msg, contactId: existing.id });
+          sendResponse({ ok: true, contact: { ...existing, first_name: msg.firstName || existing.first_name, last_name: msg.lastName, email: msg.email } });
+          return;
+        }
         const contact = await createContact(session, msg);
         await logSyncedActivity(session, { ...msg, contactId: contact.id });
         sendResponse({ ok: true, contact });

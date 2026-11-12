@@ -30,6 +30,13 @@
 let myEmail = null;
 let lastProcessedKey = null;
 let lastState = null; // { type, ...fields } for the current thread; see processOpenThread()
+// Blocks a second Confirm&Sync click while one is still in flight. This
+// is deliberately module-level, not per-button: renderPopover() always
+// rebuilds a fresh, enabled button from lastState, so closing and
+// reopening the popover mid-request (e.g. an outside click) would
+// otherwise present a brand-new enabled button and let a second click
+// fire a second concurrent sync.
+let syncInFlight = false;
 
 /* ---------------- docked rail icon + popover ---------------- */
 
@@ -47,9 +54,35 @@ let customIconPosLoaded = false;
 // null (it's only committed on pointerup) and snap the icon straight
 // back to its auto-docked spot, fighting the drag in real time.
 let isDraggingIcon = false;
+
+// A stored position could be corrupted (crash mid-write, hand-edited
+// storage) or just missing a field. Without this check, a bad value
+// like {right: undefined, top: 140} flows straight into clampIconPos's
+// Math.max/Math.min and produces NaN, which becomes "right: NaNpx" --
+// invalid CSS the browser silently ignores, leaving the icon wherever
+// it last rendered (possibly off-screen) with no way to recover, since
+// customIconPos being non-null skips the auto-dock fallback entirely.
+function isValidIconPos(pos) {
+  return !!pos && Number.isFinite(pos.top) && Number.isFinite(pos.right);
+}
+
 chrome.storage.local.get("fourlyticIconPos", ({ fourlyticIconPos }) => {
-  customIconPos = fourlyticIconPos || null;
+  if (fourlyticIconPos && !isValidIconPos(fourlyticIconPos)) {
+    chrome.storage.local.remove("fourlyticIconPos"); // don't keep re-reading a corrupt value
+  }
+  customIconPos = isValidIconPos(fourlyticIconPos) ? fourlyticIconPos : null;
   customIconPosLoaded = true;
+  positionIcon();
+});
+
+// Two Gmail tabs share the same chrome.storage.local -- without this,
+// dragging the icon in tab A leaves tab B showing the old position
+// until it's reloaded. This keeps them live-consistent.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || !changes.fourlyticIconPos) return;
+  if (isDraggingIcon) return; // don't let a remote update fight our own in-progress drag
+  const next = changes.fourlyticIconPos.newValue;
+  customIconPos = isValidIconPos(next) ? next : null;
   positionIcon();
 });
 
@@ -66,14 +99,26 @@ function clampIconPos(pos) {
 }
 
 function wireDrag(icon) {
-  let dragging = false;
+  // Scoped to a single pointerId, not a bare boolean: a second touch
+  // landing on the icon mid-drag (plausible on a tablet/touch laptop)
+  // would otherwise reset startX/startY/startRight/startTop from the
+  // new touch's coordinates while the first touch is still captured
+  // and moving, corrupting the in-progress drag.
+  let activePointerId = null;
   let moved = false;
   let startX = 0, startY = 0;
   let startRight = 0, startTop = 0;
 
+  function endDrag() {
+    activePointerId = null;
+    isDraggingIcon = false;
+    icon.classList.remove("dragging");
+  }
+
   icon.addEventListener("pointerdown", (e) => {
     if (e.button !== undefined && e.button !== 0) return; // left button / touch only
-    dragging = true;
+    if (activePointerId !== null) return; // already tracking a different pointer
+    activePointerId = e.pointerId;
     isDraggingIcon = true;
     moved = false;
     startX = e.clientX;
@@ -81,12 +126,18 @@ function wireDrag(icon) {
     const rect = icon.getBoundingClientRect();
     startRight = window.innerWidth - rect.right;
     startTop = rect.top;
-    icon.setPointerCapture(e.pointerId);
+    try {
+      icon.setPointerCapture(e.pointerId);
+    } catch (err) {
+      // Capture can throw (pointerId already released, element not
+      // connected yet) -- the drag still works fine without it since
+      // our own listeners are on the icon itself, not the document.
+    }
     e.preventDefault();
   });
 
   icon.addEventListener("pointermove", (e) => {
-    if (!dragging) return;
+    if (activePointerId === null || e.pointerId !== activePointerId) return;
     const dx = e.clientX - startX;
     const dy = e.clientY - startY;
     if (!moved && Math.hypot(dx, dy) < 4) return; // ignore tiny jitter -- still a click
@@ -101,12 +152,11 @@ function wireDrag(icon) {
   });
 
   icon.addEventListener("pointerup", (e) => {
-    if (!dragging) return;
-    dragging = false;
-    isDraggingIcon = false;
-    icon.classList.remove("dragging");
-    icon.releasePointerCapture(e.pointerId);
-    if (moved) {
+    if (activePointerId === null || e.pointerId !== activePointerId) return;
+    const wasMoved = moved;
+    try { icon.releasePointerCapture(e.pointerId); } catch (err) { /* already released -- fine */ }
+    endDrag();
+    if (wasMoved) {
       const rect = icon.getBoundingClientRect();
       customIconPos = clampIconPos({ right: window.innerWidth - rect.right, top: rect.top });
       chrome.storage.local.set({ fourlyticIconPos: customIconPos });
@@ -118,11 +168,18 @@ function wireDrag(icon) {
   // If the browser interrupts the gesture (e.g. focus loss, Gmail
   // handling the pointer elsewhere) we still must clear isDraggingIcon,
   // or positionIcon() would stay frozen forever.
-  icon.addEventListener("pointercancel", () => {
-    if (!dragging) return;
-    dragging = false;
-    isDraggingIcon = false;
-    icon.classList.remove("dragging");
+  icon.addEventListener("pointercancel", (e) => {
+    if (activePointerId === null || e.pointerId !== activePointerId) return;
+    endDrag();
+  });
+
+  // Safety net for interruptions that fire neither pointerup nor
+  // pointercancel at all -- Alt-Tab mid-drag, the OS stealing focus, a
+  // native context menu -- any of which would otherwise leave
+  // isDraggingIcon stuck true forever and freeze positionIcon().
+  window.addEventListener("blur", () => { if (activePointerId !== null) endDrag(); });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && activePointerId !== null) endDrag();
   });
 }
 
@@ -199,13 +256,24 @@ function positionIcon() {
   icon.style.display = "flex";
 }
 
-function togglePopover() {
+async function togglePopover() {
   const pop = ensurePopover();
   if (pop.classList.contains("open")) {
     pop.classList.remove("open");
     return;
   }
+  // The thread's hash doesn't change just because the user signed in
+  // (or a transient error cleared) since we last checked, so
+  // processOpenThread() never naturally re-fires for that. Force one
+  // fresh check right before showing stale "signed out"/error state,
+  // so signing in via the toolbar popup and reopening the popover
+  // doesn't still say "sign in" forever.
+  if (!lastState || lastState.type === "signed_out" || lastState.type === "error") {
+    lastProcessedKey = null;
+    await processOpenThread();
+  }
   const icon = document.getElementById("fourlytic-rail-icon");
+  if (!icon) return;
   const iconRect = icon.getBoundingClientRect();
   pop.style.right = `${window.innerWidth - iconRect.left + 10}px`;
   pop.style.top = `${iconRect.top}px`;
@@ -275,20 +343,28 @@ function renderPopover() {
       <button id="fourlytic-confirm-btn">Confirm &amp; Sync</button>
     `;
     document.getElementById("fourlytic-confirm-btn").addEventListener("click", async (e) => {
+      if (syncInFlight) return; // a request from a previous click (e.g. close/reopen mid-sync) is still pending
       const btn = e.target;
       const name = document.getElementById("fourlytic-matched-name").value.trim();
       const email = document.getElementById("fourlytic-matched-email").value.trim();
       if (!email) { btn.textContent = "Email is required"; return; }
+      syncInFlight = true;
       btn.disabled = true; btn.textContent = "Syncing…";
       const { firstName, lastName } = splitName(name, email);
-      const res = await chrome.runtime.sendMessage({
-        type: "SYNC_EXISTING",
-        contactId: s.contactId,
-        firstName, lastName, email,
-        messageId: s.key,
-        subject: s.subject,
-        snippet: s.snippet,
-      });
+      let res;
+      try {
+        res = await chrome.runtime.sendMessage({
+          type: "SYNC_EXISTING",
+          contactId: s.contactId,
+          firstName, lastName, email,
+          messageId: s.key,
+          subject: s.subject,
+          snippet: s.snippet,
+        });
+      } catch (err) {
+        res = { ok: false, error: String(err && err.message || err) };
+      }
+      syncInFlight = false;
       if (!res.ok) {
         pop.innerHTML = `<div class="fourlytic-title">Fourlytic Gmail Sync</div><span>Could not sync: ${escapeHtml(res.error || "unknown error")}</span>`;
         return;
@@ -312,19 +388,27 @@ function renderPopover() {
       <button id="fourlytic-confirm-add-btn">Confirm &amp; Sync</button>
     `;
     document.getElementById("fourlytic-confirm-add-btn").addEventListener("click", async (e) => {
+      if (syncInFlight) return; // a request from a previous click (e.g. close/reopen mid-sync) is still pending
       const btn = e.target;
       const name = document.getElementById("fourlytic-edit-name").value.trim();
       const email = document.getElementById("fourlytic-edit-email").value.trim();
       if (!email) { btn.textContent = "Email is required"; return; }
+      syncInFlight = true;
       btn.disabled = true; btn.textContent = "Syncing…";
       const { firstName, lastName } = splitName(name, email);
-      const res = await chrome.runtime.sendMessage({
-        type: "CREATE_AND_SYNC",
-        email, firstName, lastName,
-        messageId: s.key,
-        subject: s.subject,
-        snippet: s.snippet,
-      });
+      let res;
+      try {
+        res = await chrome.runtime.sendMessage({
+          type: "CREATE_AND_SYNC",
+          email, firstName, lastName,
+          messageId: s.key,
+          subject: s.subject,
+          snippet: s.snippet,
+        });
+      } catch (err) {
+        res = { ok: false, error: String(err && err.message || err) };
+      }
+      syncInFlight = false;
       if (!res.ok) {
         pop.innerHTML = `<div class="fourlytic-title">Fourlytic Gmail Sync</div><span>Could not sync: ${escapeHtml(res.error || "unknown error")}</span>`;
         return;
@@ -338,8 +422,32 @@ function renderPopover() {
 
 /* ---------------- Gmail DOM reading ---------------- */
 
-function getParticipants() {
-  const chips = Array.from(document.querySelectorAll("span.gD[email]"));
+// Best-effort scope to "the thread that's actually open," not the
+// whole document. Gmail's multi-inbox/preview-pane layouts (or simply
+// a prior thread's DOM not yet torn down during fast navigation) can
+// leave more than one thread's markup present at once; querying the
+// whole document for participants/subject/snippet separately can then
+// mix pieces of two different threads into one state. This climbs from
+// the LAST message body on the page (the convention already used for
+// the snippet) up to the nearest ancestor that also contains a subject
+// header, and uses that one element as the scope for all three reads so
+// they're at least internally consistent with each other. Like the
+// compose-container climbing below, this is a heuristic over
+// unofficial DOM, not a guarantee -- if thread data still looks mixed
+// up after a real test, this is the first place to check.
+function getThreadScope() {
+  const bodies = document.querySelectorAll(".a3s");
+  if (!bodies.length) return document;
+  let el = bodies[bodies.length - 1];
+  for (let i = 0; i < 12 && el && el !== document.body; i++) {
+    if (el.querySelector && el.querySelector("h2.hP")) return el;
+    el = el.parentElement;
+  }
+  return document;
+}
+
+function getParticipants(scope) {
+  const chips = Array.from(scope.querySelectorAll("span.gD[email]"));
   const seen = new Map();
   for (const c of chips) {
     const email = c.getAttribute("email");
@@ -349,27 +457,54 @@ function getParticipants() {
   return seen; // Map<emailLower, name>
 }
 
+// Automated senders (no-reply@, notifications@, mailer-daemon@, ...)
+// make poor CRM contacts -- if a real person is also on the thread,
+// prefer them.
+const AUTOMATED_SENDER_RE = /^(no-?reply|do-?not-?reply|notifications?|bounce|mailer-daemon)@/i;
+
 function pickLeadEmail(participants) {
   const entries = Array.from(participants.entries());
   if (entries.length === 0) return null;
-  // Prefer the most recently-seen participant that isn't the signed-in
-  // team member themselves; fall back to the first one otherwise.
-  for (let i = entries.length - 1; i >= 0; i--) {
-    if (!myEmail || entries[i][0] !== myEmail.toLowerCase()) return entries[i];
+  // Prefer a participant that isn't the signed-in team member.
+  const notMe = entries.filter(([email]) => !myEmail || email !== myEmail.toLowerCase());
+  const candidates = notMe.length ? notMe : entries;
+  // Among those, prefer the most recently-seen one that doesn't look
+  // automated; fall back to the most recent regardless if every
+  // candidate looks automated (still better than syncing nothing).
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    if (!AUTOMATED_SENDER_RE.test(candidates[i][0])) return candidates[i];
   }
-  return entries[0];
+  return candidates[candidates.length - 1];
 }
 
-function getSubject() {
-  const h2 = document.querySelector("h2.hP");
-  return h2 ? h2.textContent.trim() : "";
+function getSubject(scope) {
+  const h2s = scope.querySelectorAll("h2.hP");
+  if (!h2s.length) return "";
+  return h2s[h2s.length - 1].textContent.trim(); // last, matching the "most recent" convention used below
 }
 
-function getSnippet() {
-  const bodies = document.querySelectorAll(".a3s");
+function getSnippet(scope) {
+  const bodies = scope.querySelectorAll(".a3s");
   if (!bodies.length) return "";
   const text = bodies[bodies.length - 1].innerText || "";
   return text.trim().slice(0, 500);
+}
+
+// A cheap, non-cryptographic fingerprint of "how many messages are in
+// this thread, and what does the latest one say" -- used to detect a
+// new reply arriving in an already-open, already-synced thread (see
+// getMessageFingerprint's caller for why this matters).
+function simpleHash(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  return h.toString(36);
+}
+
+function getMessageFingerprint(scope) {
+  const bodies = scope.querySelectorAll(".a3s");
+  const count = bodies.length;
+  const lastText = count ? (bodies[count - 1].innerText || "").slice(0, 200) : "";
+  return `${count}:${simpleHash(lastText)}`;
 }
 
 function splitName(fullName, email) {
@@ -379,7 +514,11 @@ function splitName(fullName, email) {
 }
 
 function contactDisplayName(contact) {
-  return [contact.first_name, contact.last_name].filter(Boolean).join(" ") || contact.email;
+  const name = [contact.first_name, contact.last_name]
+    .filter((part) => part && part.trim())
+    .join(" ")
+    .trim();
+  return name || contact.email;
 }
 
 function escapeHtml(s) {
@@ -429,18 +568,41 @@ function formatRelativeTime(iso) {
 /* ---------------- thread processing ---------------- */
 
 async function processOpenThread() {
-  const participants = getParticipants();
+  const scope = getThreadScope();
+  const participants = getParticipants(scope);
   if (participants.size === 0) { lastState = null; setIconStatus("none"); renderIfOpen(); return; }
 
-  const key = location.hash;
+  const threadHash = location.hash; // Gmail's own permalink hash -- identifies the THREAD, not any one message in it
   const lead = pickLeadEmail(participants);
   if (!lead) { lastState = null; setIconStatus("none"); renderIfOpen(); return; }
   const [leadEmail, leadName] = lead;
 
-  if (key === lastProcessedKey) return; // already handled this thread view
-  lastProcessedKey = key;
+  // messageKey combines the thread hash with a fingerprint of the
+  // latest message. location.hash alone does NOT change when a new
+  // reply lands in an already-open thread, so gating purely on it
+  // meant: sync a thread once, and every later reply in that same
+  // thread is silently never offered for sync again, forever, because
+  // this function returns before even re-querying the CRM. Folding the
+  // fingerprint in means a new reply changes the key, which both lets
+  // this function run again AND gives that specific message its own
+  // dedupe identity when logged.
+  const fingerprint = getMessageFingerprint(scope);
+  const messageKey = `${threadHash}::${fingerprint}`;
+  if (messageKey === lastProcessedKey) return; // already handled this exact thread+message state
+  lastProcessedKey = messageKey;
 
-  const auth = await chrome.runtime.sendMessage({ type: "GET_AUTH_STATE" });
+  let auth;
+  try {
+    auth = await chrome.runtime.sendMessage({ type: "GET_AUTH_STATE" });
+  } catch (e) {
+    return; // service worker hiccup -- next trigger (hash change, DOM mutation) will retry
+  }
+  // The user may have navigated to a different thread while we were
+  // waiting on that round-trip. Without this check, a slower response
+  // for thread A can land AFTER a faster response for thread B and
+  // overwrite the state currently on screen -- including which
+  // contactId a "Confirm & Sync" click would act on.
+  if (location.hash !== threadHash) return;
   if (!auth || !auth.loggedIn) {
     myEmail = null;
     lastState = { type: "signed_out" };
@@ -450,16 +612,25 @@ async function processOpenThread() {
   }
   myEmail = auth.email || myEmail;
 
-  const check = await chrome.runtime.sendMessage({ type: "CHECK_EMAIL", senderEmail: leadEmail, messageId: key });
-  if (!check.ok) {
-    lastState = { type: "error", message: check.error || "unknown" };
+  let check;
+  try {
+    check = await chrome.runtime.sendMessage({ type: "CHECK_EMAIL", senderEmail: leadEmail, messageId: messageKey });
+  } catch (e) {
+    lastState = { type: "error", message: String(e && e.message || e) };
+    setIconStatus("pending");
+    renderIfOpen();
+    return;
+  }
+  if (location.hash !== threadHash) return; // see note above
+  if (!check || !check.ok) {
+    lastState = { type: "error", message: (check && check.error) || "unknown" };
     setIconStatus("pending");
     renderIfOpen();
     return;
   }
 
-  const subject = getSubject();
-  const snippet = getSnippet();
+  const subject = getSubject(scope);
+  const snippet = getSnippet(scope);
 
   if (check.contact) {
     if (check.alreadySynced) {
@@ -472,7 +643,7 @@ async function processOpenThread() {
         name: contactDisplayName(check.contact),
         lastSyncedAt: check.lastSyncedAt,
         email: check.contact.email,
-        key, subject, snippet,
+        key: messageKey, subject, snippet,
       };
       setIconStatus("pending");
     }
@@ -481,7 +652,7 @@ async function processOpenThread() {
       type: "unmatched_editing",
       email: leadEmail,
       name: leadName || leadEmail,
-      key, subject, snippet,
+      key: messageKey, subject, snippet,
     };
     setIconStatus("pending");
   }
@@ -513,7 +684,7 @@ function findComposeContainers() {
   const containers = new Set();
   bodies.forEach((body) => {
     let el = body;
-    for (let i = 0; i < 8 && el; i++) {
+    for (let i = 0; i < 14 && el; i++) {
       if (el.querySelector && el.querySelector('[aria-label^="Send" i], [data-tooltip^="Send" i]')) {
         containers.add(el);
         return;
@@ -532,7 +703,17 @@ async function addComposeBadge(chip, email) {
 
   let known = composeContactCache.get(email);
   if (known === undefined) {
-    const res = await chrome.runtime.sendMessage({ type: "CHECK_EMAIL", senderEmail: email, messageId: "__compose_check__" });
+    let res = null;
+    try {
+      // skipSyncCheck: this is only asking "is this a contact?" -- the
+      // background worker skips the sync-log lookups it would
+      // otherwise do per call, which matters once there are several
+      // recipient chips firing this in a loop.
+      res = await chrome.runtime.sendMessage({ type: "CHECK_EMAIL", senderEmail: email, messageId: "__compose_check__", skipSyncCheck: true });
+    } catch (e) {
+      // background worker hiccup -- fall through with res still null,
+      // handled the same as any other failed lookup below.
+    }
     known = res && res.ok ? !!res.contact : null;
     composeContactCache.set(email, known);
   }
@@ -549,7 +730,12 @@ async function addComposeBadge(chip, email) {
 }
 
 async function scanComposeRecipients() {
-  const auth = await chrome.runtime.sendMessage({ type: "GET_AUTH_STATE" });
+  let auth = null;
+  try {
+    auth = await chrome.runtime.sendMessage({ type: "GET_AUTH_STATE" });
+  } catch (e) {
+    return; // background worker hiccup -- next scheduled scan will retry
+  }
   if (!auth || !auth.loggedIn) return;
 
   for (const box of findComposeContainers()) {
