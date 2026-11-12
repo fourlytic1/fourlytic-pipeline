@@ -164,6 +164,7 @@ function renderPopover() {
       <input id="fourlytic-matched-name" type="text" value="${escapeAttr(s.name)}" placeholder="Full name">
       <input id="fourlytic-matched-email" type="text" value="${escapeAttr(s.email)}" placeholder="Email">
       ${lastSyncedLine}
+      ${renderSyncPreview(s)}
       <button id="fourlytic-confirm-btn">Confirm &amp; Sync</button>
     `;
     document.getElementById("fourlytic-confirm-btn").addEventListener("click", async (e) => {
@@ -200,6 +201,7 @@ function renderPopover() {
       <span>New contact details — edit if needed:</span>
       <input id="fourlytic-edit-name" type="text" value="${escapeAttr(s.name)}" placeholder="Full name">
       <input id="fourlytic-edit-email" type="text" value="${escapeAttr(s.email)}" placeholder="Email">
+      ${renderSyncPreview(s)}
       <button id="fourlytic-confirm-add-btn">Confirm &amp; Sync</button>
     `;
     document.getElementById("fourlytic-confirm-add-btn").addEventListener("click", async (e) => {
@@ -279,6 +281,28 @@ function escapeHtml(s) {
 
 function escapeAttr(s) {
   return escapeHtml(s).replace(/\n/g, "&#10;");
+}
+
+// Shows what will actually get logged as the activity -- this email's
+// subject + a short snippet of its body -- so the team member can see
+// exactly what's about to be written before they confirm.
+function renderSyncPreview(s) {
+  const subject = (s.subject || "").trim();
+  const snippet = (s.snippet || "").trim();
+  if (!subject && !snippet) return "";
+  const subjectLine = subject
+    ? `<div class="fourlytic-preview-subject">${escapeHtml(subject)}</div>`
+    : "";
+  const snippetLine = snippet
+    ? `<div class="fourlytic-preview-snippet">${escapeHtml(snippet.slice(0, 140))}${snippet.length > 140 ? "…" : ""}</div>`
+    : "";
+  return `
+    <div class="fourlytic-sync-preview">
+      <div class="fourlytic-preview-label">Will be logged as an activity:</div>
+      ${subjectLine}
+      ${snippetLine}
+    </div>
+  `;
 }
 
 function formatRelativeTime(iso) {
