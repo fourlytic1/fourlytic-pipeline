@@ -33,12 +33,87 @@ let lastState = null; // { type, ...fields } for the current thread; see process
 
 /* ---------------- docked rail icon + popover ---------------- */
 
+// Once the team member drags the icon, its position is theirs to keep --
+// stored as {top, right} (px from those edges, matching how the icon is
+// already positioned) in chrome.storage.local so it persists across
+// Gmail reloads. Until they drag it, it auto-docks under Gmail's native
+// side rail as before. `customIconPos` is loaded async on startup; drag
+// handling lives on the icon itself, wired up once in ensureIcon().
+let customIconPos = null; // null = not dragged yet -> auto-dock
+let customIconPosLoaded = false;
+chrome.storage.local.get("fourlyticIconPos", ({ fourlyticIconPos }) => {
+  customIconPos = fourlyticIconPos || null;
+  customIconPosLoaded = true;
+  positionIcon();
+});
+
+const ICON_SIZE = 40;
+const ICON_MARGIN = 4; // keep it fully on-screen, not flush against the edge
+
+function clampIconPos(pos) {
+  const maxRight = Math.max(ICON_MARGIN, window.innerWidth - ICON_SIZE - ICON_MARGIN);
+  const maxTop = Math.max(ICON_MARGIN, window.innerHeight - ICON_SIZE - ICON_MARGIN);
+  return {
+    right: Math.min(Math.max(pos.right, ICON_MARGIN), maxRight),
+    top: Math.min(Math.max(pos.top, ICON_MARGIN), maxTop),
+  };
+}
+
+function wireDrag(icon) {
+  let dragging = false;
+  let moved = false;
+  let startX = 0, startY = 0;
+  let startRight = 0, startTop = 0;
+
+  icon.addEventListener("pointerdown", (e) => {
+    if (e.button !== undefined && e.button !== 0) return; // left button / touch only
+    dragging = true;
+    moved = false;
+    startX = e.clientX;
+    startY = e.clientY;
+    const rect = icon.getBoundingClientRect();
+    startRight = window.innerWidth - rect.right;
+    startTop = rect.top;
+    icon.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  icon.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - startX;
+    const dy = e.clientY - startY;
+    if (!moved && Math.hypot(dx, dy) < 4) return; // ignore tiny jitter -- still a click
+    moved = true;
+    icon.classList.add("dragging");
+    const next = clampIconPos({ right: startRight - dx, top: startTop + dy });
+    icon.style.right = `${next.right}px`;
+    icon.style.top = `${next.top}px`;
+    if (document.getElementById("fourlytic-popover")?.classList.contains("open")) {
+      togglePopover(); // close it rather than let it float away from the icon mid-drag
+    }
+  });
+
+  icon.addEventListener("pointerup", (e) => {
+    if (!dragging) return;
+    dragging = false;
+    icon.classList.remove("dragging");
+    icon.releasePointerCapture(e.pointerId);
+    if (moved) {
+      const rect = icon.getBoundingClientRect();
+      customIconPos = clampIconPos({ right: window.innerWidth - rect.right, top: rect.top });
+      chrome.storage.local.set({ fourlyticIconPos: customIconPos });
+    } else {
+      togglePopover(); // a plain click, no drag
+    }
+  });
+}
+
 function ensureIcon() {
   let icon = document.getElementById("fourlytic-rail-icon");
   if (icon) return icon;
   icon = document.createElement("div");
   icon.id = "fourlytic-rail-icon";
-  icon.title = "Fourlytic Gmail Sync";
+  icon.title = "Fourlytic Gmail Sync — drag to move";
   const img = document.createElement("img");
   img.src = chrome.runtime.getURL("icons/icon48.png");
   const dot = document.createElement("div");
@@ -46,7 +121,7 @@ function ensureIcon() {
   icon.appendChild(img);
   icon.appendChild(dot);
   document.body.appendChild(icon);
-  icon.addEventListener("click", () => togglePopover());
+  wireDrag(icon);
   return icon;
 }
 
@@ -82,6 +157,19 @@ function findRailAnchor() {
 function positionIcon() {
   const icon = document.getElementById("fourlytic-rail-icon");
   if (!icon) return;
+
+  // Once the team member has dragged the icon, that position wins --
+  // re-clamped on resize so it can't end up off-screen -- instead of
+  // re-anchoring under Gmail's native rail every time.
+  if (customIconPos) {
+    const pos = clampIconPos(customIconPos);
+    icon.style.right = `${pos.right}px`;
+    icon.style.top = `${pos.top}px`;
+    icon.style.display = "flex";
+    return;
+  }
+  if (!customIconPosLoaded) return; // wait for storage read to resolve first
+
   const anchor = findRailAnchor();
   if (!anchor) { icon.style.display = "none"; return; }
   const rect = anchor.getBoundingClientRect();

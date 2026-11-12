@@ -14,11 +14,16 @@
   display: none; /* shown once JS finds an anchor and positions it */
   align-items: center;
   justify-content: center;
-  cursor: pointer;
+  cursor: grab;
   box-shadow: 0 2px 8px rgba(0,0,0,.2);
   border: 2px solid transparent;
+  touch-action: none; /* let pointer events drive dragging, not the page */
 }
-#fourlytic-rail-icon img { width: 20px; height: 20px; display: block; }
+#fourlytic-rail-icon.dragging {
+  cursor: grabbing;
+  box-shadow: 0 4px 16px rgba(0,0,0,.35);
+}
+#fourlytic-rail-icon img { width: 20px; height: 20px; display: block; pointer-events: none; }
 #fourlytic-rail-icon.has-action { border-color: #ea580c; }
 #fourlytic-rail-icon.has-synced { border-color: #2e7d32; }
 #fourlytic-rail-icon .fourlytic-dot {
